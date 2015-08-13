@@ -105,3 +105,23 @@ setup() {
     ddlog compile --materialization "$TESTDIR"/input.ddl >"$actualOutput"
     diff "$expectedOutput" "$actualOutput"
 }
+
+## tests for --partition support
+
+# compare the pretty-printed output of the partition version with what's expected
+@test "$it prints --partition input as expected" {
+    expectedOutput=$TESTDIR/print-partition.expected
+    actualOutput=${expectedOutput%.expected}.actual
+    [ -e "$expectedOutput" ] || skip
+    ddlog print --partition n=10,i=1 "$TESTDIR"/input.ddl >"$actualOutput"
+    diff "$expectedOutput" "$actualOutput"
+}
+
+# compare the compiled output of the partition version with what's expected
+@test "$it compiles --partition input as expected" {
+    expectedOutput=$TESTDIR/compile-partition.expected
+    actualOutput=${expectedOutput%.expected}.actual
+    [ -e "$expectedOutput" ] || skip
+    ddlog compile --partition n=10,i=1 "$TESTDIR"/input.ddl >"$actualOutput"
+    diff "$expectedOutput" "$actualOutput"
+}
