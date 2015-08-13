@@ -21,7 +21,9 @@ object DeepDiveLog {
   ( handler: DeepDiveLogHandler = null
   , inputFiles: List[String] = List()
   , mode: Mode = ORIGINAL
+  , partition: Map[String, Int] = null
   )
+
   val parser = new scopt.OptionParser[Config]("ddlogc") {
     head("ddlogc", "0.0.1")
     cmd("compile")                     required() action { (_, c) => c.copy(handler = DeepDiveLogCompiler)        }
@@ -31,6 +33,7 @@ object DeepDiveLog {
     opt[Unit]('i', "incremental")      optional() action { (_, c) => c.copy(mode    = INCREMENTAL)                } text("Whether to derive delta rules")
     opt[Unit]("materialization")       optional() action { (_, c) => c.copy(mode    = MATERIALIZATION)            } text("Whether to materialize origin data")
     opt[Unit]("merge")                 optional() action { (_, c) => c.copy(mode    = MERGE)                      } text("Whether to merge delta data")
+    opt[Map[String, Int]]("partition") optional() action { (x, c) => c.copy(partition = x)                        } text("Partition arguments")
     arg[String]("FILE...") unbounded() required() action { (f, c) => c.copy(inputFiles = c.inputFiles ++ List(f)) } text("Input DDLog programs files")
     checkConfig { c =>
       if (c.handler == null) failure("No command specified")

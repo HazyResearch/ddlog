@@ -781,14 +781,13 @@ object DeepDiveLogCompiler extends DeepDiveLogHandler {
     val programToCompile =
       // derive and compile the program based on mode information
       config.mode match {
-        case ORIGINAL => parsedProgram
+        case ORIGINAL => if (config.partition == null) parsedProgram else DeepDiveLogPartitionDeriver.derive(parsedProgram, config)
         case INCREMENTAL => DeepDiveLogDeltaDeriver.derive(parsedProgram)
         case MATERIALIZATION => parsedProgram
         case MERGE => DeepDiveLogMergeDeriver.derive(parsedProgram)
       }
     // take an initial pass to analyze the parsed program
     val state = new CompilationState( programToCompile, config )
-
     val body = new ListBuffer[String]()
     body ++= compileSchemaDeclarations((state.schemaDeclarationGroupByHead map (_._2)).flatten.toList, state)
     state.extractionRuleGroupByHead foreach {keyVal => body ++= compileExtractionRules(keyVal._2, state)}

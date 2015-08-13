@@ -102,7 +102,7 @@ case class FunctionDeclaration( functionName: String, inputType: RelationType,
   outputType: RelationType, implementations: List[FunctionImplementationDeclaration], mode: Option[String] = None) extends Statement
 case class ExtractionRule(headName: String, q : ConjunctiveQuery, supervision: Option[String] = None) extends Statement // Extraction rule
 case class FunctionCallRule(output: String, function: String, q : ConjunctiveQuery) extends Statement // Extraction rule
-case class InferenceRule(head: InferenceRuleHead, q : ConjunctiveQuery, weights : FactorWeight, mode: Option[String] = None) extends Statement // Weighted rule
+case class InferenceRule(head: InferenceRuleHead, q : ConjunctiveQuery, weights : FactorWeight, mode: Option[String] = None, partition: Option[String] = None) extends Statement // Weighted rule
 
 // Parser
 class DeepDiveLogParser extends JavaTokenParsers {
@@ -133,6 +133,7 @@ class DeepDiveLogParser extends JavaTokenParsers {
   def inferenceModeType = ident
   def annotationName = ident
   def annotationArgumentName = ident
+  def partitionColumnName = ident
 
   def annotation: Parser[Annotation] =
     "@" ~ annotationName ~ opt(annotationArguments) ^^ {
@@ -182,7 +183,7 @@ class DeepDiveLogParser extends JavaTokenParsers {
       }
     }
 
-  def operator = "||" | "+" | "-" | "*" | "/" | "&"
+  def operator = "||" | "+" | "-" | "*" | "/" | "&" | "%"
   def typeOperator = "::"
   val aggregationFunctions = Set("MAX", "SUM", "MIN", "ARRAY_ACCUM", "ARRAY_AGG", "COUNT")
 
@@ -315,6 +316,7 @@ class DeepDiveLogParser extends JavaTokenParsers {
 
   def factorWeight = "@weight" ~> "(" ~> rep1sep(expr, ",") <~ ")" ^^ { FactorWeight(_) }
   def inferenceMode = "@mode" ~> "(" ~> inferenceModeType <~ ")"
+  def partitionColumn = "@partition" ~> "(" ~> partitionColumnName <~ ")"
 
   // factor functions
   def headAtom = relationName ~ ("(" ~> rep1sep(expr, ",") <~ ")") ^^ {
@@ -358,8 +360,8 @@ class DeepDiveLogParser extends JavaTokenParsers {
   }
 
   def inferenceRule =
-    opt(inferenceMode) ~ factorWeight ~ inferenceRuleHead ~ inferenceConjunctiveQuery ^^ {
-      case (mode ~ weight ~ head ~ cq) => InferenceRule(head, cq, weight, mode)
+    opt(partitionColumn) ~ opt(inferenceMode) ~ factorWeight ~ inferenceRuleHead ~ inferenceConjunctiveQuery ^^ {
+      case (partition ~ mode ~ weight ~ head ~ cq) => InferenceRule(head, cq, weight, mode, partition)
   }
 
   // rules or schema elements in arbitrary order
