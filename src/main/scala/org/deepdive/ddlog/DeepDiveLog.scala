@@ -24,8 +24,8 @@ object DeepDiveLog {
   , partition: Map[String, Int] = null
   )
 
-  val parser = new scopt.OptionParser[Config]("ddlogc") {
-    head("ddlogc", "0.0.1")
+  val parser = new scopt.OptionParser[Config]("ddlog") {
+    head("DDlog Compiler", "0.0.1")
     cmd("compile")                     required() action { (_, c) => c.copy(handler = DeepDiveLogCompiler)        }
     cmd("print")                       required() action { (_, c) => c.copy(handler = DeepDiveLogPrettyPrinter)   }
     cmd("check")                       required() action { (_, c) => c.copy(handler = DeepDiveLogSemanticChecker) }
