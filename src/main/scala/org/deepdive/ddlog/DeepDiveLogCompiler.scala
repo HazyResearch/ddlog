@@ -488,11 +488,13 @@ object DeepDiveLogCompiler extends DeepDiveLogHandler {
         }
         val indentation = " " * stmt.a.name.length
         val blockName = ss.resolveExtractorBlockName(stmt)
+        var distributed_by = stmt.annotation find {e => e.name == "distributed_by"}
+        val distributed_by_str = if (distributed_by == None) "" else s"""DISTRIBUTED BY (${distributed_by.get.args.get.right.get.mkString(", ")})"""
         schemas += s"""
           deepdive.extraction.extractors.${blockName} {
             sql: \"\"\" DROP TABLE IF EXISTS ${stmt.a.name} CASCADE;
             CREATE TABLE
-            ${stmt.a.name}(${columnDecls.mkString(",\n" + indentation)})
+            ${stmt.a.name}(${columnDecls.mkString(",\n" + indentation)}) ${distributed_by_str}
             \"\"\"
             style: "sql_extractor"
           }"""
