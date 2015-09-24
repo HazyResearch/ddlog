@@ -58,11 +58,21 @@ Consider
  unordered attributes, etc.).
 */
 
-import scala.collection.immutable.HashMap
+import java.io.PrintWriter
+
 import org.apache.commons.lang3.StringEscapeUtils
-import scala.collection.mutable.ListBuffer
 import org.deepdive.ddlog.DeepDiveLog.Mode._
+
+import scala.collection.immutable.HashMap
+import scala.collection.mutable.ListBuffer
 import scala.language.postfixOps
+
+// intermediate representation for compilation result
+trait CompiledBlock
+// either a fragment of deepdive.conf
+case class DeepDiveConf(content: String) extends CompiledBlock
+// or a UDF code file
+case class UDFCodeFile(path: String, content: String) extends CompiledBlock
 
 object AliasStyle extends Enumeration {
   type AliasStyle = Value
@@ -462,56 +472,59 @@ class QueryCompiler(cq : ConjunctiveQuery, ss: CompilationState) {
 
 }
 
-
 // Compiler that takes parsed program as input and prints blocks of application.conf
 object DeepDiveLogCompiler extends DeepDiveLogHandler {
-  type CompiledBlock = String
   type CompiledBlocks = List[CompiledBlock]
 
   def isForIncremental(name: String) = name startsWith "dd_new_"
 
   // Generate schema and cleanup part for database
   def compileSchemaDeclarations(stmts: List[SchemaDeclaration], ss: CompilationState): CompiledBlocks = {
-    var schemas = new ListBuffer[String]()
-    for (stmt <- stmts) {
-      if (isForIncremental(stmt.a.name) && (ss.isQueryTerm(stmt.a.name))) {
-      } else {
-        var columnDecls = stmt.a.terms.zipWithIndex map {
-          case (name,i) => s"${name} ${stmt.a.types(i)}"
-        }
-        if (stmt.isQuery) {
-          val labelColumn = stmt.variableType match {
-            case Some(BooleanType)        => "label boolean"
-            case Some(MultinomialType(_)) => "label int"
+    {
+      stmts flatMap { stmt =>
+        if (isForIncremental(stmt.a.name) && (ss.isQueryTerm(stmt.a.name))) {
+          List()
+        } else {
+          var columnDecls = stmt.a.terms.zipWithIndex map {
+            case (name, i) => s"${name} ${stmt.a.types(i)}"
           }
-          columnDecls = columnDecls :+ "id bigint" :+ labelColumn
-        }
-        val indentation = " " * stmt.a.name.length
-        val blockName = ss.resolveExtractorBlockName(stmt)
-        schemas += s"""
+          if (stmt.isQuery) {
+            val labelColumn = stmt.variableType match {
+              case Some(BooleanType) => "label boolean"
+              case Some(MultinomialType(_)) => "label int"
+            }
+            columnDecls = columnDecls :+ "id bigint" :+ labelColumn
+          }
+          val indentation = " " * stmt.a.name.length
+          val blockName = ss.resolveExtractorBlockName(stmt)
+          List(DeepDiveConf(
+            s"""
           deepdive.extraction.extractors.${blockName} {
             sql: \"\"\" DROP TABLE IF EXISTS ${stmt.a.name} CASCADE;
             CREATE TABLE
             ${stmt.a.name}(${columnDecls.mkString(",\n" + indentation)})
             \"\"\"
             style: "sql_extractor"
-          }"""
+          }"""))
+        }
       }
-    }
-    // Cleanup incremental table extractor
-    val truncateTableList = (stmts map (x =>
+    } ::: {
+      // Cleanup incremental table extractor
+      val truncateTableList = (stmts map (x =>
       if (isForIncremental(x.a.name) && (ss.isQueryTerm(x.a.name))) ""
       else s"TRUNCATE ${x.a.name};")).filter(_ != "")
-    if (truncateTableList.length > 0) {
-      schemas += s"""
-        deepdive.extraction.extractors.cleanup {
-          sql: \"\"\"
-          ${truncateTableList.mkString("\n          ")}
-          \"\"\"
-          style: "sql_extractor"
-        }"""
+      if (truncateTableList.length > 0) {
+        List(DeepDiveConf(s"""
+          deepdive.extraction.extractors.cleanup {
+            sql: \"\"\"
+            ${truncateTableList.mkString("\n          ")}
+            \"\"\"
+            style: "sql_extractor"
+          }"""))
+      } else {
+        List()
+      }
     }
-    schemas.toList
   }
 
 
@@ -570,7 +583,8 @@ object DeepDiveLogCompiler extends DeepDiveLogHandler {
     }
     val sqlCmdForInsert  = if (createTable) "INSERT INTO" else "CREATE VIEW"
     val useAS            = if (createTable) "" else " AS"
-    val extractor = s"""
+    List(DeepDiveConf(
+      s"""
       deepdive.extraction.extractors.${blockName} {
         sql: \"\"\" ${sqlCmdForCleanUp}
         ${sqlCmdForInsert} ${stmts(0).headName}${useAS} ${inputQueries.mkString("\nUNION ALL\n")}
@@ -578,13 +592,11 @@ object DeepDiveLogCompiler extends DeepDiveLogHandler {
         style: "sql_extractor"
           ${ss.generateDependenciesOfCompiledBlockFor(stmts)}
       }
-    """
-    List(extractor)
+    """))
   }
 
   def compileFunctionCallRules(stmts: List[FunctionCallRule], ss: CompilationState): CompiledBlocks = {
-    var extractors = new ListBuffer[String]()
-    for (stmt <- stmts) {
+    stmts map { stmt =>
 
       val function = ss.resolveFunctionName(stmt.function)
       val udfDetails = (function.implementations collectFirst {
@@ -599,7 +611,7 @@ object DeepDiveLogCompiler extends DeepDiveLogHandler {
 
       val blockName = ss.resolveExtractorBlockName(stmt)
       val parallelism = stmt.parallelism getOrElse("${PARALLELISM}")
-      val extractor = s"""
+      DeepDiveConf(s"""
         deepdive.extraction.extractors.${blockName} {
           input: \"\"\" ${new QueryCompiler(stmt.q, ss).generateSQL(TableAlias)}
           \"\"\"
@@ -608,16 +620,13 @@ object DeepDiveLogCompiler extends DeepDiveLogHandler {
           ${ss.generateDependenciesOfCompiledBlockFor(List(stmt))}
           parallelism: ${parallelism}
         }
-      """
-      extractors += extractor
+      """)
     }
-    extractors.toList
   }
 
   // generate inference rule part for deepdive
   def compileInferenceRules(stmts: List[InferenceRule], ss: CompilationState): CompiledBlocks = {
-    var blocks = List[String]()
-    for (stmt <- stmts) {
+    stmts map { stmt =>
       var inputQueries = new ListBuffer[String]()
       var func = ""
       var weight = ""
@@ -699,15 +708,14 @@ object DeepDiveLogCompiler extends DeepDiveLogHandler {
         }
       }
       val blockName = ss.resolveInferenceBlockName(stmt)
-      blocks ::= s"""
+      DeepDiveConf(s"""
         deepdive.inference.factors.${blockName} {
           input_query: \"\"\"${inputQueries.mkString(" UNION ALL ")}\"\"\"
           function: "${func}"
           weight: "${weight}"
         }
-      """
+      """)
     }
-    blocks.reverse
   }
 
 
@@ -719,7 +727,7 @@ object DeepDiveLogCompiler extends DeepDiveLogHandler {
       case MATERIALIZATION => "MATERIALIZATION"
       case MERGE           => "MERGE"
     }
-    List("""
+    List(DeepDiveConf("""
   deepdive.db.default {
     driver: "org.postgresql.Driver"
     url: "jdbc:postgresql://"${PGHOST}":"${PGPORT}"/"${DBNAME}
@@ -730,7 +738,7 @@ object DeepDiveLogCompiler extends DeepDiveLogHandler {
     port: ${PGPORT}
     incremental_mode: """ + s"""${mode}
     }
-    """)
+    """))
   }
 
   def compileVariableKey(ss: CompilationState): CompiledBlocks = {
@@ -739,18 +747,18 @@ object DeepDiveLogCompiler extends DeepDiveLogHandler {
       if (stmt.isQuery) keys += s"""${stmt.a.name} : [${stmt.a.terms.mkString(", ")}]"""
     }
     ss.mode match {
-      case INCREMENTAL => List(s"""
+      case INCREMENTAL => List(DeepDiveConf(s"""
       deepdive.schema.keys {
         ${keys.mkString("\n        ")}
-      }""")
-      case _ => List("")
+      }"""))
+      case _ => List()
     }
   }
 
   // generate application.conf pipelines
   def compilePipelines(ss: CompilationState): CompiledBlocks = {
     val run = "deepdive.pipeline.run: ${PIPELINE}"
-    val setup_database_pipeline = ((ss.schemaDeclarationGroupByHead map (_._2)).flatten map {s => ss.resolveExtractorBlockName(s)}).mkString(", ")
+    val setup_database_pipeline = (ss.schemaDeclarationGroupByHead.values.flatten map {s => ss.resolveExtractorBlockName(s)}).mkString(", ")
     val initdb = if (setup_database_pipeline.length > 0) s"deepdive.pipeline.pipelines.initdb: [${setup_database_pipeline}]" else ""
     val extraction = (ss.visible map {s => ss.resolveExtractorBlockName(s)}).mkString(", ")
     val extraction_pipeline = if (extraction.length > 0) s"deepdive.pipeline.pipelines.extraction: [${extraction}]" else ""
@@ -766,7 +774,15 @@ object DeepDiveLogCompiler extends DeepDiveLogHandler {
       case MATERIALIZATION | INCREMENTAL => "deepdive.pipeline.base_dir: ${BASEDIR}"
       case _ => ""
     }
-    List(run, initdb, extraction_pipeline, inference_pipeline, endtoend_pipeline, cleanup_pipeline, base_dir).filter(_ != "")
+    List(
+      run,
+      initdb,
+      extraction_pipeline,
+      inference_pipeline,
+      endtoend_pipeline,
+      cleanup_pipeline,
+      base_dir
+    ) filter(_ != "") map (DeepDiveConf(_))
   }
 
   // generate variable schema statements
@@ -784,12 +800,12 @@ object DeepDiveLogCompiler extends DeepDiveLogHandler {
         }
       case _ => ()
     }
-    val ddSchema = s"""
+    List(DeepDiveConf(
+      s"""
       deepdive.schema.variables {
         ${schema.mkString("\n")}
       }
-    """
-    List(ddSchema)
+    """))
   }
 
   // entry point for compilation
@@ -808,7 +824,7 @@ object DeepDiveLogCompiler extends DeepDiveLogHandler {
     // take an initial pass to analyze the parsed program
     val state = new CompilationState( programToCompile, config )
 
-    val body = new ListBuffer[String]()
+    var body: CompiledBlocks = List()
     body ++= compileSchemaDeclarations((state.schemaDeclarationGroupByHead map (_._2)).flatten.toList, state)
     state.extractionRuleGroupByHead foreach {keyVal => body ++= compileExtractionRules(keyVal._2, state)}
     state.functionCallList          foreach {func   => body ++= compileFunctionCallRules(List(func), state)}
@@ -822,12 +838,15 @@ object DeepDiveLogCompiler extends DeepDiveLogHandler {
       :::
       compileVariableSchema(programToCompile, state)
       :::
-      body.toList
+      body
       :::
       compilePipelines(state)
     )
 
     // emit the generated code
-    blocks foreach println
+    blocks foreach {
+      case DeepDiveConf(conf) => println(conf)
+      case UDFCodeFile(path, code) => new PrintWriter(path) { write(code); close }
+    }
   }
 }
