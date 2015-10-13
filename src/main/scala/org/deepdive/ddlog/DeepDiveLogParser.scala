@@ -3,9 +3,15 @@ package org.deepdive.ddlog
 // DeepDiveLog syntax
 // See: https://docs.google.com/document/d/1SBIvvki3mnR28Mf0Pkin9w9mWNam5AA0SpIGj1ZN2c4
 
+import java.io.File
+
+import scala.annotation.tailrec
+import scala.collection.immutable.PagedSeq
+import scala.io.Source
 import scala.util.parsing.combinator._
 import org.apache.commons.lang3.StringEscapeUtils
 import scala.util.Try
+import scala.util.parsing.input.{PagedSeqReader, Position, StreamReader}
 
 // ***************************************
 // * The union types for for the parser. *
@@ -389,16 +395,70 @@ class DeepDiveLogParser extends JavaTokenParsers {
                                       )
   def program : Parser[DeepDiveLog.Program] = phrase(rep1(statement <~ "."))
 
-  def parseProgram(inputProgram: CharSequence, fileName: Option[String] = None): List[Statement] = {
+  def parseProgram(inputProgram: Input): DeepDiveLog.Program = {
     parse(program, inputProgram) match {
       case result: Success[_] => result.get
-      case error:  NoSuccess  => throw new RuntimeException(fileName.getOrElse("") + error.toString())
+      case error:  NoSuccess  => sys.error(error.next.asInstanceOf[CppPositionStreamReader].fileName + error.toString())
     }
   }
 
-  def parseProgramFile(fileName: String): List[Statement] = {
-    val source = scala.io.Source.fromFile(fileName)
-    try parseProgram(source.getLines mkString "\n", Some(fileName))
-    finally source.close()
+  def parseProgramFile(fileName: String): List[Statement] =
+    parseProgram(CppPositionStreamReader(fileName, Source.fromFile(fileName).reader()))
+}
+
+
+/**
+ * Below is a Reader implementation that recognizes line/file directives that look like <code># 123 "path/to/a/file.ddlog" 4</code> produced by cpp, the C PreProcessor after expanding macros and include directives.  It shamelessly copies the StreamReader implementation.
+ */
+object CppPositionStreamReader {
+  def apply(fileName: String, in: java.io.Reader): CppPositionStreamReader = {
+    positionDirectivesConsumed(
+      new CppPositionStreamReader(fileName, PagedSeq.fromReader(in), 0, 1))
+  }
+
+  // XXX This line/file directive recognition may occur repeatedly and can be fairly expensive.  Ideally, skipping over the directive lines should be handled by the constructor, but emulating StreamReader and playing nice with PagedSeqReader makes it a little hard.
+  def positionDirectivesConsumed(r: CppPositionStreamReader): CppPositionStreamReader = {
+    val nextLine = r.seq.slice(0, r.nextEol)
+    """# (\d+) "(.*)"( \d+)?""".r.findPrefixMatchOf(nextLine) match {
+      case None => r
+      case Some(m) =>
+        // found a cpp line/file directive
+        val lnumFound = m.group(1) toInt
+        val fileNameFound: String = m.group(2)
+        positionDirectivesConsumed(
+          new CppPositionStreamReader(fileNameFound, r.seq.slice(r.nextEol+1), 0, lnumFound))
+    }
+  }
+}
+
+sealed class CppPositionStreamReader(val fileName: String, val seq: PagedSeq[Char], off: Int, lnum: Int) extends PagedSeqReader(seq, off) {
+  override def rest: CppPositionStreamReader = {
+    if (off == seq.length) this
+    else if (seq(off) == '\n') {
+      CppPositionStreamReader.positionDirectivesConsumed(
+        new CppPositionStreamReader(fileName, seq.slice(off + 1), 0, lnum + 1))
+    }
+    else new CppPositionStreamReader(fileName, seq, off + 1, lnum)
+  }
+
+  private def nextEol = {
+    var i = off
+    while (i < seq.length && seq(i) != '\n' && seq(i) != StreamReader.EofCh) i += 1
+    i
+  }
+
+  override def drop(n: Int): CppPositionStreamReader = {
+    val eolPos = nextEol
+    if (eolPos < off + n && eolPos < seq.length)
+      CppPositionStreamReader.positionDirectivesConsumed(
+        new CppPositionStreamReader(fileName, seq.slice(eolPos + 1), 0, lnum + 1)).drop(off + n - (eolPos + 1))
+    else
+      new CppPositionStreamReader(fileName, seq, off + n, lnum)
+  }
+
+  override def pos: Position = new Position {
+    def line = lnum
+    def column = off + 1
+    def lineContents = seq.slice(0, nextEol).toString
   }
 }
