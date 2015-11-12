@@ -28,6 +28,7 @@ dd_delta_smoke.label: Boolean
       }
     
 
+
           deepdive.extraction.extractors.init_dd_delta_friends {
             sql: """ DROP TABLE IF EXISTS dd_delta_friends CASCADE;
             CREATE TABLE

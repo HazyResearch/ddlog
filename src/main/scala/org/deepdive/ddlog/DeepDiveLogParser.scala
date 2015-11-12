@@ -91,6 +91,9 @@ case class RelationTypeAlias(likeRelationName: String) extends FunctionInputOutp
 trait FunctionImplementationDeclaration
 case class RowWiseLineHandler(style: String, command: String) extends FunctionImplementationDeclaration
 
+// CNN configuration
+case class CNNConfiguration(conf: List[String])
+
 // Statements that will be parsed and compiled
 trait Statement
 case class SchemaDeclaration( a : Attribute
@@ -102,7 +105,8 @@ case class FunctionDeclaration( functionName: String, inputType: FunctionInputOu
   outputType: FunctionInputOutputType, implementations: List[FunctionImplementationDeclaration]) extends Statement
 case class ExtractionRule(headName: String, q : ConjunctiveQuery, supervision: Option[String] = None) extends Statement // Extraction rule
 case class FunctionCallRule(output: String, function: String, q : ConjunctiveQuery, mode: Option[String], parallelism: Option[Int]) extends Statement // Extraction rule
-case class InferenceRule(head: InferenceRuleHead, q : ConjunctiveQuery, weights : FactorWeight, mode: Option[String] = None) extends Statement // Weighted rule
+case class InferenceRule(head: InferenceRuleHead, q : ConjunctiveQuery, weights : FactorWeight,
+  mode: Option[String] = None, cnnConfig: Option[CNNConfiguration] = None) extends Statement // Weighted rule
 
 // Parser
 class DeepDiveLogParser extends JavaTokenParsers {
@@ -375,10 +379,22 @@ class DeepDiveLogParser extends JavaTokenParsers {
       ConjunctiveQuery(List(), _, false, None)
   }
 
-  def inferenceRule =
+  def deepdiveInferenceRule =
     opt(inferenceMode) ~ factorWeight ~ inferenceRuleHead ~ inferenceConjunctiveQuery ^^ {
       case (mode ~ weight ~ head ~ cq) => InferenceRule(head, cq, weight, mode)
   }
+
+  def cnnConfig = "@cnn" ~> "(" ~> rep1sep(stringLiteralAsString, ",") <~ ")" ^^ {
+    CNNConfiguration(_)
+  }
+
+  def cnnInferenceRule = 
+    cnnConfig ~ opt(factorWeight) ~ headAtom ~ inferenceConjunctiveQuery ^^ {
+      case (config ~ weight ~ headAtom ~ cq) => InferenceRule(InferenceRuleHead(FactorFunction.IsTrue, List(headAtom)),
+        cq, FactorWeight(List(IntConst(0))), None, Some(config))
+  }
+
+  def inferenceRule = deepdiveInferenceRule | cnnInferenceRule
 
   // rules or schema elements in arbitrary order
   def statement : Parser[Statement] = ( inferenceRule

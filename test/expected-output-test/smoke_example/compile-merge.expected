@@ -17,6 +17,7 @@
       }
     
 
+
       deepdive.extraction.extractors.ext_person_smokes {
         sql: """ TRUNCATE person_smokes;
         INSERT INTO person_smokes SELECT R0.person_id, R0.smokes

@@ -17,6 +17,7 @@
       }
     
 
+
       deepdive.extraction.extractors.ext_sentences {
         sql: """ TRUNCATE sentences;
         INSERT INTO sentences SELECT R0.document_id, R0.sentence, R0.words, R0.lemma, R0.pos_tags, R0.dependencies, R0.ner_tags, R0.sentence_offset, R0.sentence_id

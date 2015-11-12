@@ -17,6 +17,7 @@
       }
     
 
+
           deepdive.extraction.extractors.init_words_raw {
             sql: """ DROP TABLE IF EXISTS words_raw CASCADE;
             CREATE TABLE
@@ -89,8 +90,8 @@ FROM words_raw R0
           output_relation: "words"
           udf: ${APP_HOME}"/udf/ext_training.py"
           style: "tsv_extractor" 
-         
-          input_batch_size: ${INPUT_BATCH_SIZE} 
+          
+          input_batch_size: ${INPUT_BATCH_SIZE}
           parallelism: ${PARALLELISM}
         }
       
@@ -104,7 +105,7 @@ FROM words R0, words R1
           udf: ${APP_HOME}"/udf/ext_features.py"
           style: "tsv_extractor" 
           dependencies: [ "ext_words_by_ext_training" ]
-          input_batch_size: ${INPUT_BATCH_SIZE} 
+          input_batch_size: ${INPUT_BATCH_SIZE}
           parallelism: ${PARALLELISM}
         }
       

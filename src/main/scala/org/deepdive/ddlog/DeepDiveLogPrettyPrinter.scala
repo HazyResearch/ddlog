@@ -179,6 +179,7 @@ object DeepDiveLogPrettyPrinter extends DeepDiveLogHandler {
 
   def print(stmt: InferenceRule): String = {
     ( stmt.mode map (s => s"""@mode("${s}")\n""") getOrElse "" ) +
+    ( stmt.cnnConfig map (s => s"""@cnn(${s.conf map (x => "\"" + x + "\"") mkString(", ")})\n""") getOrElse "" ) +
     ( s"@weight(${stmt.weights.variables map print mkString(", ")})\n"
     ) + print(stmt.head) + print(stmt.q) + ".\n"
   }

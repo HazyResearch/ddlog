@@ -17,6 +17,7 @@
       }
     
 
+
           deepdive.extraction.extractors.init_S {
             sql: """ DROP TABLE IF EXISTS S CASCADE;
             CREATE TABLE
@@ -90,7 +91,7 @@ FROM R R0
           udf: ${APP_HOME}"//bin/false"
           style: "tsv_extractor" 
           
-          input_batch_size: ${INPUT_BATCH_SIZE} 
+          input_batch_size: ${INPUT_BATCH_SIZE}
           parallelism: ${PARALLELISM}
         }
       
@@ -104,7 +105,7 @@ FROM R R0
           udf: ${APP_HOME}"//bin/false"
           style: "tsv_extractor" 
           
-          input_batch_size: ${INPUT_BATCH_SIZE} 
+          input_batch_size: ${INPUT_BATCH_SIZE}
           parallelism: ${PARALLELISM}
         }
       
@@ -118,7 +119,7 @@ FROM R R0
           udf: ${APP_HOME}"//bin/false"
           style: "tsv_extractor" 
           
-          input_batch_size: ${INPUT_BATCH_SIZE} 
+          input_batch_size: ${INPUT_BATCH_SIZE}
           parallelism: ${PARALLELISM}
         }
       
@@ -132,7 +133,7 @@ FROM R R0
           udf: ${APP_HOME}"//bin/false"
           style: "tsv_extractor" 
           
-          input_batch_size: ${INPUT_BATCH_SIZE} 
+          input_batch_size: ${INPUT_BATCH_SIZE}
           parallelism: ${PARALLELISM}
         }
       
@@ -146,7 +147,7 @@ FROM R R0
           udf: ${APP_HOME}"//bin/false"
           style: "tsv_extractor" 
           
-          input_batch_size: ${INPUT_BATCH_SIZE} 
+          input_batch_size: ${INPUT_BATCH_SIZE}
           parallelism: ${PARALLELISM}
         }
       
@@ -160,7 +161,7 @@ FROM R R0
           udf: ${APP_HOME}"//bin/false"
           style: "tsv_extractor" 
           
-          input_batch_size: ${INPUT_BATCH_SIZE} 
+          input_batch_size: ${INPUT_BATCH_SIZE}
           parallelism: ${PARALLELISM}
         }
       
@@ -174,7 +175,7 @@ FROM R R0
           udf: ${APP_HOME}"//bin/false"
           style: "tsv_extractor" 
           
-          input_batch_size: ${INPUT_BATCH_SIZE} 
+          input_batch_size: ${INPUT_BATCH_SIZE}
           parallelism: ${PARALLELISM}
         }
       

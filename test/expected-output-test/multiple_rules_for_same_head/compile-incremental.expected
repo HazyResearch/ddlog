@@ -23,6 +23,7 @@ dd_new_Q.label: Boolean
       }
     
 
+
           deepdive.extraction.extractors.init_dd_new_S {
             sql: """ DROP TABLE IF EXISTS dd_new_S CASCADE;
             CREATE TABLE
@@ -198,7 +199,7 @@ FROM dd_delta_R R0
           udf: ${APP_HOME}"//bin/false"
           style: "tsv_extractor" 
           
-          input_batch_size: ${INPUT_BATCH_SIZE} 
+          input_batch_size: ${INPUT_BATCH_SIZE}
           parallelism: ${PARALLELISM}
         }
       
@@ -212,7 +213,7 @@ FROM dd_delta_R R0
           udf: ${APP_HOME}"//bin/false"
           style: "tsv_extractor" 
           
-          input_batch_size: ${INPUT_BATCH_SIZE} 
+          input_batch_size: ${INPUT_BATCH_SIZE}
           parallelism: ${PARALLELISM}
         }
       
@@ -226,7 +227,7 @@ FROM dd_delta_R R0
           udf: ${APP_HOME}"//bin/false"
           style: "tsv_extractor" 
           
-          input_batch_size: ${INPUT_BATCH_SIZE} 
+          input_batch_size: ${INPUT_BATCH_SIZE}
           parallelism: ${PARALLELISM}
         }
       
@@ -240,7 +241,7 @@ FROM dd_delta_R R0
           udf: ${APP_HOME}"//bin/false"
           style: "tsv_extractor" 
           
-          input_batch_size: ${INPUT_BATCH_SIZE} 
+          input_batch_size: ${INPUT_BATCH_SIZE}
           parallelism: ${PARALLELISM}
         }
       
@@ -254,7 +255,7 @@ FROM dd_delta_R R0
           udf: ${APP_HOME}"//bin/false"
           style: "tsv_extractor" 
           
-          input_batch_size: ${INPUT_BATCH_SIZE} 
+          input_batch_size: ${INPUT_BATCH_SIZE}
           parallelism: ${PARALLELISM}
         }
       
@@ -268,7 +269,7 @@ FROM dd_delta_R R0
           udf: ${APP_HOME}"//bin/false"
           style: "tsv_extractor" 
           
-          input_batch_size: ${INPUT_BATCH_SIZE} 
+          input_batch_size: ${INPUT_BATCH_SIZE}
           parallelism: ${PARALLELISM}
         }
       
@@ -282,7 +283,7 @@ FROM dd_delta_R R0
           udf: ${APP_HOME}"//bin/false"
           style: "tsv_extractor" 
           
-          input_batch_size: ${INPUT_BATCH_SIZE} 
+          input_batch_size: ${INPUT_BATCH_SIZE}
           parallelism: ${PARALLELISM}
         }
       

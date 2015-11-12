@@ -21,6 +21,7 @@ c.label: Boolean
       }
     
 
+
           deepdive.extraction.extractors.init_e {
             sql: """ DROP TABLE IF EXISTS e CASCADE;
             CREATE TABLE

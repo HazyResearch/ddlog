@@ -653,6 +653,7 @@ object DeepDiveLogCompiler extends DeepDiveLogHandler {
   // generate inference rule part for deepdive
   def compileInferenceRules(stmts: List[InferenceRule], ss: CompilationState): CompiledBlocks = {
     var blocks = List[String]()
+    var port = 5555
     for (stmt <- stmts) {
       var inputQueries = new ListBuffer[String]()
       var func = ""
@@ -734,14 +735,21 @@ object DeepDiveLogCompiler extends DeepDiveLogHandler {
           }
         }
       }
+
+      // mode
+      val cnnConfig = stmt.cnnConfig map (x => s"""
+        mode: cnn
+        port: ${port}
+        cnn_configurations: [${x.conf.mkString(", ")}]""") getOrElse ""
       val blockName = ss.resolveInferenceBlockName(stmt)
       blocks ::= s"""
         deepdive.inference.factors.${blockName} {
           input_query: \"\"\"${inputQueries.mkString(" UNION ALL ")}\"\"\"
           function: "${func}"
-          weight: "${weight}"
+          weight: "${weight}"${cnnConfig}
         }
       """
+      port += 1
     }
     blocks.reverse
   }
@@ -828,6 +836,32 @@ object DeepDiveLogCompiler extends DeepDiveLogHandler {
     List(ddSchema)
   }
 
+  // generate image declaration
+  def compileImageSchema(statements: DeepDiveLog.Program, ss: CompilationState): CompiledBlocks = {
+    var schema = Set[String]()
+    // generate the statements.
+    statements.foreach {
+      case decl: SchemaDeclaration =>
+        if (decl.isQuery) {
+          decl.a.terms.zip(decl.a.annotations) foreach { case (t, a) =>
+            a foreach { case x =>
+              if (x.name == "image_path")
+               schema += s"${decl.a.name}.${t}: ${x.args.get.right.get(0)}"
+            }
+            // if (a.contains(Annotation("file_path")))
+            //   schema += s"${decl.a.name}.${t}: a"
+          }
+        }
+      case _ => ()
+    }
+    val ddSchema = ( if (schema.isEmpty) "" else s"""
+      deepdive.schema.images {
+        ${schema.mkString("\n")}
+      }
+    """ )
+    List(ddSchema)
+  }
+
   // entry point for compilation
   override def run(parsedProgram: DeepDiveLog.Program, config: DeepDiveLog.Config) = {
     // semantic checking
@@ -857,6 +891,8 @@ object DeepDiveLogCompiler extends DeepDiveLogHandler {
       compileVariableKey(state)
       :::
       compileVariableSchema(programToCompile, state)
+      :::
+      compileImageSchema(programToCompile, state)
       :::
       body.toList
       :::

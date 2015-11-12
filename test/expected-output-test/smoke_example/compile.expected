@@ -18,6 +18,7 @@ cancer.label: Boolean
       }
     
 
+
           deepdive.extraction.extractors.init_person_smokes {
             sql: """ DROP TABLE IF EXISTS person_smokes CASCADE;
             CREATE TABLE

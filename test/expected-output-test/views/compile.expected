@@ -17,6 +17,7 @@
       }
     
 
+
           deepdive.extraction.extractors.init_R {
             sql: """ DROP TABLE IF EXISTS R CASCADE;
             CREATE TABLE

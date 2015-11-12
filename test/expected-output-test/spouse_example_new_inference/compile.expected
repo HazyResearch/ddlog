@@ -17,6 +17,7 @@
       }
     
 
+
           deepdive.extraction.extractors.init_sentences {
             sql: """ DROP TABLE IF EXISTS sentences CASCADE;
             CREATE TABLE

@@ -28,6 +28,7 @@ q1.label: Boolean
       }
     
 
+
           deepdive.extraction.extractors.init_dd_new_label2 {
             sql: """ DROP TABLE IF EXISTS dd_new_label2 CASCADE;
             CREATE TABLE

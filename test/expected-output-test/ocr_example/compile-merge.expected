@@ -17,6 +17,7 @@
       }
     
 
+
       deepdive.extraction.extractors.ext_label2 {
         sql: """ TRUNCATE label2;
         INSERT INTO label2 SELECT R0.wid, R0.val

@@ -23,6 +23,7 @@ dd_new_has_spouse.label: Boolean
       }
     
 
+
           deepdive.extraction.extractors.init_dd_delta_articles {
             sql: """ DROP TABLE IF EXISTS dd_delta_articles CASCADE;
             CREATE TABLE
