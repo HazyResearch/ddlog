@@ -654,6 +654,7 @@ object DeepDiveLogCompiler extends DeepDiveLogHandler {
   def compileInferenceRules(stmts: List[InferenceRule], ss: CompilationState): CompiledBlocks = {
     var blocks = List[String]()
     var port = 5555
+    var gpu = 0
     for (stmt <- stmts) {
       var inputQueries = new ListBuffer[String]()
       var func = ""
@@ -740,6 +741,7 @@ object DeepDiveLogCompiler extends DeepDiveLogHandler {
       val cnnConfig = stmt.cnnConfig map (x => s"""
         mode: cnn
         port: ${port}
+        gpu : ${gpu}
         cnn_configurations: [${x.conf.mkString(", ")}]""") getOrElse ""
       val blockName = ss.resolveInferenceBlockName(stmt)
       blocks ::= s"""
@@ -750,6 +752,7 @@ object DeepDiveLogCompiler extends DeepDiveLogHandler {
         }
       """
       port += 1
+      gpu += 1
     }
     blocks.reverse
   }
