@@ -848,8 +848,11 @@ object DeepDiveLogCompiler extends DeepDiveLogHandler {
         if (decl.isQuery) {
           decl.a.terms.zip(decl.a.annotations) foreach { case (t, a) =>
             a foreach { case x =>
-              if (x.name == "image_path")
-               schema += s"${decl.a.name}.${t}: ${x.args.get.right.get(0)}"
+              if (x.name == "image_path") {
+                val file = new java.io.File(x.args.get.right.get(0).toString)
+                val path = ( if (file.isAbsolute()) file.getCanonicalPath() else s"$${APP_HOME}/${file.getPath()}" )
+                schema += s"${decl.a.name}.${t}: ${path}"
+              }
             }
             // if (a.contains(Annotation("file_path")))
             //   schema += s"${decl.a.name}.${t}: a"
