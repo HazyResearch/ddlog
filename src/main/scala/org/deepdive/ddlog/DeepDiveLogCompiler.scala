@@ -739,7 +739,7 @@ object DeepDiveLogCompiler extends DeepDiveLogHandler {
 
       // mode
       val cnnConfig = stmt.cnnConfig map (x => s"""
-        mode: cnn
+        mode: ${if (x.conf.size == 2) "cnn" else "cnn_pretrained"}
         port: ${port}
         gpu : ${gpu}
         cnn_configurations: [${x.conf.mkString(", ")}]""") getOrElse ""
