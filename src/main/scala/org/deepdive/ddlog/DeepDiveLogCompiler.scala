@@ -59,7 +59,6 @@ Consider
 */
 
 import scala.collection.immutable.HashMap
-import org.apache.commons.lang3.StringEscapeUtils
 import scala.collection.mutable.ListBuffer
 import org.deepdive.ddlog.DeepDiveLog.Mode._
 import scala.language.postfixOps
@@ -695,7 +694,7 @@ ${if (createTable) {
       val function = ss.resolveFunctionName(stmt.function)
       val udfDetails = (function.implementations collectFirst {
         case impl: RowWiseLineHandler =>
-          s"""udf: $${APP_HOME}\"/${StringEscapeUtils.escapeJava(impl.command)}\"
+          s"""udf: $${APP_HOME}\"/${DeepDiveLogPrettyPrinter.escapeJava(impl.command)}\"
           style: \"${impl.style}_extractor\" """
       })
 

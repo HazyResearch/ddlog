@@ -65,7 +65,7 @@ trait DeepDiveLogHandler {
 
   def run(config: DeepDiveLog.Config): Unit = try {
     // parse each file into a single program
-    val parsedProgram = parseFiles(config.inputFiles)
+    val parsedProgram = null //parseFiles(config.inputFiles)
 
     // desugar unless explicitly said to skip so
     val programToRun =
@@ -80,14 +80,23 @@ trait DeepDiveLogHandler {
       else die(e.getMessage)
   }
 
-  def parseFiles(fileNames: List[String]): DeepDiveLog.Program = {
-    val ddlParser = new DeepDiveLogParser
-    fileNames flatMap { ddlParser.parseProgramFile(_) }
-  }
+//  def parseFiles(fileNames: List[String]): DeepDiveLog.Program = {
+//    val ddlParser = new DeepDiveLogParser
+//    fileNames flatMap { ddlParser.parseProgramFile(_) }
+//  }
 
   def die(message: String = null) = {
     if (message != null)
       System.err.println("[error] " + message)
     System.exit(1)
   }
+}
+
+
+import scala.scalajs.js.JSApp
+
+object DeepDiveLogApp extends JSApp {
+    def main() = {
+     DeepDiveLogCompiler.run(List(), new DeepDiveLog.Config())
+    }
 }

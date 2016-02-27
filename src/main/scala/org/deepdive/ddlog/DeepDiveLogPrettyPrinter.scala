@@ -1,6 +1,5 @@
 package org.deepdive.ddlog
 
-import org.apache.commons.lang3.StringEscapeUtils
 import org.deepdive.ddlog.DeepDiveLog.Mode._
 
 // Pretty printer that simply prints the parsed input
@@ -57,7 +56,7 @@ object DeepDiveLogPrettyPrinter extends DeepDiveLogHandler {
       case impl: RowWiseLineHandler => {
         val styleStr = if (impl.style == "plpy") s"\n        runs as plpy"
         else s"\n        handles ${impl.style} lines"
-        "\"" + StringEscapeUtils.escapeJava(impl.command) + "\"" + styleStr
+        "\"" + escapeJava(impl.command) + "\"" + styleStr
       }
     }
     s"""function ${stmt.functionName}
@@ -68,7 +67,7 @@ object DeepDiveLogPrettyPrinter extends DeepDiveLogHandler {
   }
 
   def printLiteral(value: Any): String = value match {
-    case s: String => "\"" + StringEscapeUtils.escapeJava(s) + "\""
+    case s: String => "\"" + escapeJava(s) + "\""
     case _ => value toString
   }
 
@@ -81,7 +80,7 @@ object DeepDiveLogPrettyPrinter extends DeepDiveLogHandler {
       case IntConst(value) => value.toString
       case DoubleConst(value) => value.toString
       case BooleanConst(value) => value.toString
-      case StringConst(value) => "\"" + StringEscapeUtils.escapeJava(value) + "\""
+      case StringConst(value) => "\"" + escapeJava(value) + "\""
       case FuncExpr(function, args, agg) => {
         val resolvedArgs = args map (x => print(x))
         s"${function}(${resolvedArgs.mkString(", ")})"
@@ -195,6 +194,8 @@ object DeepDiveLogPrettyPrinter extends DeepDiveLogHandler {
     ( s"@weight(${stmt.weights.variables map print mkString(", ")})\n"
     ) + print(stmt.head) + print(stmt.q) + ".\n"
   }
+
+  def escapeJava(s: String): String = s
 
   override def run(parsedProgram: DeepDiveLog.Program, config: DeepDiveLog.Config) = {
     val programToPrint =
