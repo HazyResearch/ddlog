@@ -156,28 +156,34 @@ class CompilationState( statements : DeepDiveLog.Program, config : DeepDiveLog.C
 
   // Given an inference rule, resolve its name for the compiled inference block.
   def resolveInferenceBlockName(s: InferenceRule): String = {
-    val factorFuncName: String = s.head.function.toString.toLowerCase
-    val idxInInferenceRulesSharingHead = inferenceRules filter(_.head equals s.head) indexOf(s)
-    mode match {
-      case INCREMENTAL => s"dd_delta_inf${
-        // XXX This comes right after the prefix to prevent potential collision with user's name
-        optionalIndex(idxInInferenceRulesSharingHead)
-      }_${
-        factorFuncName
-      }_${
-        s.head.terms map {_.name stripPrefix("dd_new_")} mkString("_")
-      }"
-      case _ =>           s"inf${
-        // XXX This comes right after the prefix to prevent potential collision with user's name
-        optionalIndex(idxInInferenceRulesSharingHead)
-      }_${
-        // function name
-        factorFuncName
-      }_${
-        // followed by variable names
-        s.head.terms map {_.name} mkString("_")
-      }"
-    }
+        // how to map a rule to its basename
+    // TODO support @rule("name") annotation to override these generated names
+    def ruleBaseNameFor(s: InferenceRule) = mode match {
+          case INCREMENTAL =>
+            ("dd_delta_inf", s"${
+              // function name
+              s.head.function.toString.toLowerCase
+            }_${
+              s.head.terms map {
+                _.name stripPrefix ("dd_new_")
+              } mkString ("_")
+            }")
+          case _ =>
+            ("inf", s"${
+              // function name
+              s.head.function.toString.toLowerCase
+            }_${
+              // followed by variable names
+              s.head.terms map { case t => s"${if (t.isNegated) "not_" else ""}${t.name}" } mkString ("_")
+            }")
+        }
+    // find this rule's base name and all rules that share it
+    val ruleBaseName = ruleBaseNameFor(s)
+    val allInferenceRulesSharingHead = inferenceRules filter(ruleBaseNameFor(_) equals ruleBaseName)
+    s"${ruleBaseName._1}${
+        // keep an index before the base name to prevent potential collision with user's name
+        optionalIndex(allInferenceRulesSharingHead indexOf s)
+      }_${ruleBaseName._2}"
   }
 
   // Given a variable, resolve it.  TODO: This should give a warning,
