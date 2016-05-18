@@ -832,28 +832,6 @@ ${if (createTable) {
   }
 
 
-  def compileUserSettings(ss: CompilationState): CompiledBlocks = {
-    // TODO read user's proto-application.conf and augment it
-    val mode = ss.mode match {
-      case ORIGINAL        => "ORIGINAL"
-      case INCREMENTAL     => "INCREMENTAL"
-      case MATERIALIZATION => "MATERIALIZATION"
-      case MERGE           => "MERGE"
-    }
-    List("""
-  deepdive.db.default {
-    driver: "org.postgresql.Driver"
-    url: "jdbc:postgresql://"${PGHOST}":"${PGPORT}"/"${DBNAME}
-    user: ${PGUSER}
-    password: ${PGPASSWORD}
-    dbname: ${DBNAME}
-    host: ${PGHOST}
-    port: ${PGPORT}
-    incremental_mode: """ + s"""${mode}
-    }
-    """)
-  }
-
   def compileVariableKey(ss: CompilationState): CompiledBlocks = {
     var keys = new ListBuffer[String]()
     for (stmt <- (ss.schemaDeclarationGroupByHead map (_._2)).flatten) {
@@ -948,8 +926,6 @@ ${if (createTable) {
 
     // compile the program into blocks of application.conf
     val blocks = (
-      compileUserSettings(state)
-      :::
       compileVariableKey(state)
       :::
       compileVariableSchema(programToCompile, state)
