@@ -1,0 +1,38 @@
+DROP TABLE IF EXISTS dd_factors_inf_imply_person_smokes_person_has_cancer;
+DROP TABLE IF EXISTS dd_factors_inf_imply_person_smokes_person_smokes;
+DROP TABLE IF EXISTS dd_variables_person_has_cancer;
+DROP TABLE IF EXISTS dd_variables_person_smokes;
+
+CREATE TABLE IF NOT EXISTS dd_factors_inf_imply_person_smokes_person_has_cancer("person_smokes.R0.dd_id" bigint, "person_has_cancer.R1.dd_id" bigint, feature_value double precision);
+INSERT INTO dd_factors_inf_imply_person_smokes_person_has_cancer VALUES(9, 3, 1);
+INSERT INTO dd_factors_inf_imply_person_smokes_person_has_cancer VALUES(10, 4, 1);
+INSERT INTO dd_factors_inf_imply_person_smokes_person_has_cancer VALUES(11, 5, 1);
+INSERT INTO dd_factors_inf_imply_person_smokes_person_has_cancer VALUES(7, 1, 1);
+INSERT INTO dd_factors_inf_imply_person_smokes_person_has_cancer VALUES(8, 2, 1);
+INSERT INTO dd_factors_inf_imply_person_smokes_person_has_cancer VALUES(6, 0, 1);
+CREATE TABLE IF NOT EXISTS dd_factors_inf_imply_person_smokes_person_smokes("person_smokes.R0.dd_id" bigint, "person_smokes.R1.dd_id" bigint, feature_value double precision);
+INSERT INTO dd_factors_inf_imply_person_smokes_person_smokes VALUES(9, 10, 1);
+INSERT INTO dd_factors_inf_imply_person_smokes_person_smokes VALUES(9, 11, 1);
+INSERT INTO dd_factors_inf_imply_person_smokes_person_smokes VALUES(9, 7, 1);
+INSERT INTO dd_factors_inf_imply_person_smokes_person_smokes VALUES(10, 9, 1);
+INSERT INTO dd_factors_inf_imply_person_smokes_person_smokes VALUES(11, 9, 1);
+INSERT INTO dd_factors_inf_imply_person_smokes_person_smokes VALUES(11, 7, 1);
+INSERT INTO dd_factors_inf_imply_person_smokes_person_smokes VALUES(7, 9, 1);
+INSERT INTO dd_factors_inf_imply_person_smokes_person_smokes VALUES(7, 11, 1);
+INSERT INTO dd_factors_inf_imply_person_smokes_person_smokes VALUES(8, 6, 1);
+INSERT INTO dd_factors_inf_imply_person_smokes_person_smokes VALUES(6, 8, 1);
+CREATE TABLE IF NOT EXISTS dd_variables_person_has_cancer(person_id bigint, dd__label boolean, dd__count bigint, dd_id bigint);
+INSERT INTO dd_variables_person_has_cancer VALUES(6, null, 1, 0);
+INSERT INTO dd_variables_person_has_cancer VALUES(4, null, 1, 1);
+INSERT INTO dd_variables_person_has_cancer VALUES(5, null, 1, 2);
+INSERT INTO dd_variables_person_has_cancer VALUES(1, null, 1, 3);
+INSERT INTO dd_variables_person_has_cancer VALUES(2, null, 1, 4);
+INSERT INTO dd_variables_person_has_cancer VALUES(3, null, 1, 5);
+CREATE TABLE IF NOT EXISTS dd_variables_person_smokes(person_id bigint, dd__label boolean, dd__count bigint, dd_id bigint);
+INSERT INTO dd_variables_person_smokes VALUES(6, null, 1, 6);
+INSERT INTO dd_variables_person_smokes VALUES(4, null, 1, 7);
+INSERT INTO dd_variables_person_smokes VALUES(5, null, 1, 8);
+INSERT INTO dd_variables_person_smokes VALUES(1, 't', 1, 9);
+INSERT INTO dd_variables_person_smokes VALUES(2, null, 1, 10);
+INSERT INTO dd_variables_person_smokes VALUES(3, 't', 1, 11);
+

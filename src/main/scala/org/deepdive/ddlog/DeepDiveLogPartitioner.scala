@@ -110,6 +110,18 @@ class DeepDiveLogPartitioner( program : DeepDiveLog.Program, config : DeepDiveLo
     }
   }
 
+  val partitionCost = Map(
+    "v_B" -> 10.0,
+    "v_A" -> 1.0,
+    "v_D" -> 3.0,
+    "f_F" -> 4.0,
+    "e_F_A" -> 1.0,
+    "e_F_B" -> 1.0,
+    "e_F_C" -> 1.0,
+    "e_F_D" -> 1.0,
+    "f_H" -> 40.0
+  )
+
   def typeArity(tp: Int, typeMap: Map[String, Int], v: SimplifiedAtom): Int = {
     (0 until v.terms.size).map({ i =>
       if (typeMap("v_" + v.name + "_arg" + i.toString + "_t") == tp) {
@@ -275,7 +287,7 @@ class DeepDiveLogPartitioner( program : DeepDiveLog.Program, config : DeepDiveLo
     acc += "SELECT ('x'||substr(md5($1),1,16))::bit(64)::bigint; "
     acc += "$$ LANGUAGE SQL;\n"
     acc += "CREATE FUNCTION bigint_to_workerid(bigint) returns integer as $$ "
-    acc += "SELECT MOD(24 + MOD($1, 24), 24); "
+    acc += "SELECT MOD(24 + MOD($1, 24), 24)::integer; "
     acc += "$$ LANGUAGE SQL;"
     
     acc
@@ -328,14 +340,37 @@ class DeepDiveLogPartitioner( program : DeepDiveLog.Program, config : DeepDiveLo
         acc += " WHERE "
         acc += ir.variables.zipWithIndex.flatMap({ case (v, i) =>
           v.terms.zip(vm(v.name).terms).map({ case (t, mt) =>
-            "(R" + i.toString + "." + mt + " == " + term_map(t) + ")"
-          }) :+ ("(T." + v.name + ".R" + i.toString + ".dd_id == R" + i.toString + ".dd_id)")
+            "(R" + i.toString + "." + mt + " = " + term_map(t) + ")"
+          }) :+ ("(T.\\\"" + v.name + ".R" + i.toString + ".dd_id\\\" = R" + i.toString + ".dd_id)")
         }).mkString(" AND ")
         acc += ";"
       }
     }
 
     acc
+  }
+
+  def variablePartitionCost(pc: PartitionClass) = {
+    pc match {
+      case PartitionClassMaster(c) => partitionCost.getOrElse("v_" + c, 0.0)
+      case PartitionClassWorker(c, _) => partitionCost.getOrElse("v_" + c, 0.0)
+    }
+  }
+
+  def factorPartitionCost(ir: SimplifiedInferenceRule, pc: PartitionClass, varPartitions: Map[String, PartitionClass]) = {
+    val factor_partclass_str = pc match {
+      case PartitionClassMaster(c) => c
+      case PartitionClassWorker(c, _) => c
+    }
+
+    ir.variables.map({ v =>
+      val var_partclass_str = varPartitions(v.name) match {
+        case PartitionClassMaster(c) => c
+        case PartitionClassWorker(c, _) => c
+      }
+
+      partitionCost.getOrElse("e_" + factor_partclass_str + "_" + var_partclass_str, 0.0)
+    }).sum + partitionCost.getOrElse("f_" + factor_partclass_str, 0.0)
   }
 
   def partition() = {
@@ -488,7 +523,15 @@ class DeepDiveLogPartitioner( program : DeepDiveLog.Program, config : DeepDiveLo
       })).map({ s =>
         "      \"" + s + "\"" 
       }).mkString(",\n")) + "\n"
-      acc += "    ]\n"
+      acc += "    ],\n"
+
+      acc += "    \"sql_to_cost\": \"SELECT ("
+      acc += (variable_partitions.map({ case (v,p) => 
+        variablePartitionCost(p).toString + " * (SELECT COUNT(*) FROM dd_variables_" + v + ")"
+      }) ++ factor_partitions.map({ case (ir,p) =>
+        factorPartitionCost(ir, p, variable_partitions).toString + " * (SELECT COUNT(*) FROM dd_factors_" + ir.name + ")"
+      })).mkString(" + ")
+      acc += ") AS total_cost;\"\n"
 
       acc += "  }"
 
