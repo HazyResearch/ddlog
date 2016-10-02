@@ -23,6 +23,8 @@ object DeepDiveLog {
    , inputFiles: List[String] = List()
    , query: String = null
    , skipDesugar: Boolean = false
+   , numWorkers: Int = 16
+   , costModelPath: String = ""
   )
   val commandLine = new scopt.OptionParser[Config]("ddlog") {
     val commonProgramOpts = List(
@@ -37,6 +39,8 @@ object DeepDiveLog {
     cmd("export-schema")               required() action { (_, c) => c.copy(handler = DeepDiveLogSchemaExporter)  } text("Exports given program in JSON")
     cmd("semantic-partition")          required() action { (_, c) => c.copy(handler = DeepDiveLogPartitioner)     } text("Extracts info needed for semantic partitioning")
     opt[Unit]("skip-desugar")          optional() action { (_, c) => c.copy(skipDesugar = true)                   } text("Whether to skip desugaring and assume no sugar")
+    opt[Int]('w', "workers")           optional() action { (i, c) => c.copy(numWorkers = i)                       } text("Number of workers for semantic partitioning")
+    opt[String]('M', "cost-model")     optional() action { (m, c) => c.copy(costModelPath = m)                    } text("Path of cost model file")
     arg[String]("FILE...") minOccurs(0) unbounded() action { (f, c) => c.copy(inputFiles = c.inputFiles ++ List(f)) } text("Path to DDLog program files")
     checkConfig { c =>
       if (c.handler == null) failure("No command specified")

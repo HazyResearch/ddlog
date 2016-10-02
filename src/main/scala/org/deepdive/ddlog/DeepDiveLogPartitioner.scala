@@ -6,6 +6,7 @@ package org.deepdive.ddlog
 import scala.collection.immutable.HashMap
 import scala.collection.mutable.HashSet
 import scala.language.postfixOps
+import scala.io.Source
 
 case class SimplifiedAtom(name: String, terms: Seq[String])
 case class SimplifiedInferenceRule(name: String, variables: Seq[SimplifiedAtom])
@@ -30,6 +31,7 @@ class DeepDiveLogPartitioner( program : DeepDiveLog.Program, config : DeepDiveLo
   import DeepDiveLogCompiler._
 
   val statements = program
+  val numWorkers = config.numWorkers
 
   val attrNameForRelationAndPosition: Map[ Tuple2[String,Int], String ] =
     (statements collect {
@@ -110,17 +112,28 @@ class DeepDiveLogPartitioner( program : DeepDiveLog.Program, config : DeepDiveLo
     }
   }
 
-  val partitionCost = Map(
-    "v_B" -> 10.0,
-    "v_A" -> 1.0,
-    "v_D" -> 3.0,
-    "f_F" -> 4.0,
-    "e_F_A" -> 1.0,
-    "e_F_B" -> 1.0,
-    "e_F_C" -> 1.0,
-    "e_F_D" -> 1.0,
-    "f_H" -> 40.0
-  )
+  val partitionCost: Map[String,Double] = if (config.costModelPath == "") {
+    Map[String,Double]()
+  }
+  else {
+    Map((Source.fromFile(config.costModelPath).getLines().map { l =>
+      val y = l.split(" ")
+      assert(y.size == 2)
+      y(0) -> y(1).toDouble
+    }).toSeq:_*)
+  }
+
+  // Map(
+  //   "v_B" -> 10.0,
+  //   "v_A" -> 1.0,
+  //   "v_D" -> 3.0,
+  //   "f_F" -> 4.0,
+  //   "e_F_A" -> 1.0,
+  //   "e_F_B" -> 1.0,
+  //   "e_F_C" -> 1.0,
+  //   "e_F_D" -> 1.0,
+  //   "f_H" -> 40.0
+  // )
 
   def typeArity(tp: Int, typeMap: Map[String, Int], v: SimplifiedAtom): Int = {
     (0 until v.terms.size).map({ i =>
@@ -287,7 +300,7 @@ class DeepDiveLogPartitioner( program : DeepDiveLog.Program, config : DeepDiveLo
     acc += "SELECT ('x'||substr(md5($1),1,16))::bit(64)::bigint; "
     acc += "$$ LANGUAGE SQL;\n"
     acc += "CREATE FUNCTION bigint_to_workerid(bigint) returns integer as $$ "
-    acc += "SELECT MOD(24 + MOD($1, 24), 24)::integer; "
+    acc += "SELECT MOD(" + numWorkers.toString + " + MOD($1, " + numWorkers.toString + "), " + numWorkers.toString + ")::integer; "
     acc += "$$ LANGUAGE SQL;"
     
     acc
