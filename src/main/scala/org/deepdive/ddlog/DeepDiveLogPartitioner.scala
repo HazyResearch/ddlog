@@ -397,7 +397,7 @@ class DeepDiveLogPartitioner( program : DeepDiveLog.Program, config : DeepDiveLo
         })):_*)
 
         acc += s"UPDATE $table_name AS T SET partition_key = '$c' || bigint_to_workerid("
-        acc += ts.map({ t => "hash_to_bigint(" + term_map(t) + "::text)" }).mkString(" + ")
+        acc += ts.map({ t => "bigint_to_workerid(hash_to_bigint(" + term_map(t) + "::text))" }).mkString(" + ")
         acc += ") FROM "
         acc += ir.variables.zipWithIndex.map({ case (v, i) =>
           "dd_variables_" + v.name + " AS R" + i.toString
