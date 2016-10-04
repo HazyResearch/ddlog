@@ -447,6 +447,7 @@ class DeepDiveLogPartitioner( program : DeepDiveLog.Program, config : DeepDiveLo
     val partition_plan = cfgPartitionPlan match {
       case "A" => PartitionPlanA
       case "B" => PartitionPlanB
+      case "C" => PartitionPlanC
       case _ => throw new Exception("Invalid partition plan \"" + cfgPartitionPlan + "\"") 
     }
 
@@ -616,6 +617,60 @@ class DeepDiveLogPartitioner( program : DeepDiveLog.Program, config : DeepDiveLo
         }
         else {
           PartitionClassWorker("G", worker_pc_terms)
+        }
+      }
+      else {
+        PartitionClassMaster("H")
+      }
+    }
+
+  }
+
+
+
+  object PartitionPlanC extends PartitionPlan {
+
+    def getFactorPartition(tbps: Set[Map[Int, Int]], ir: SimplifiedInferenceRule, promotions: Map[String, PromotionClass]): PartitionClass = {
+      val variable_owners = Set((ir.variables.map { v =>
+        getVariableOwner(tbps, v)
+      }):_*)
+
+      if (variable_owners.size == 1) {
+        // all the variables have the same local partition, so we can just use it
+        variable_owners.head
+      }
+      else if ((variable_owners - PartitionClassMaster("A")).size == 1) {
+        // the variables are all owned by either master, or a single worker
+        // use partition class D if possible
+        val worker_pc_terms = (variable_owners - PartitionClassMaster("A")).head.asInstanceOf[PartitionClassWorker].by_terms
+
+        val master_vars = (ir.variables.flatMap { v =>
+          if (getVariableOwner(tbps, v) == PartitionClassMaster("A")) {
+            Seq(v)
+          }
+          else {
+            Seq()
+          }
+        })
+
+        for (v <- master_vars) {
+          promotions(v.name).share
+        }
+
+        val master_ufo = if (cfgUseUfo && (master_vars.size == 1)) {
+          promotions(master_vars.head.name).ufo
+          true
+        }
+        else if ((!cfgUseUfo) || (master_vars.size > 1)) {
+          false
+        }
+        else {
+          throw new Exception("No master vars found in D-class factor.")
+        }
+
+        (master_ufo) match {
+          case (false) => PartitionClassWorker("D", worker_pc_terms)
+          case (true) => PartitionClassWorker("Du", worker_pc_terms)
         }
       }
       else {
