@@ -351,8 +351,8 @@ class DeepDiveLogPartitioner( program : DeepDiveLog.Program, config : DeepDiveLo
     acc += "CREATE FUNCTION hash_to_bigint(text) RETURNS bigint AS $$ "
     acc += "SELECT ('x'||substr(md5($1),1,16))::bit(64)::bigint; "
     acc += "$$ LANGUAGE SQL;\n"
-    acc += "CREATE FUNCTION bigint_to_workerid(bigint) returns integer as $$ "
-    acc += "SELECT MOD(" + numWorkers.toString + " + MOD($1, " + numWorkers.toString + "), " + numWorkers.toString + ")::integer; "
+    acc += "CREATE FUNCTION bigint_to_workerid(bigint) returns bigint as $$ "
+    acc += "SELECT MOD(" + numWorkers.toString + " + MOD($1, " + numWorkers.toString + "), " + numWorkers.toString + ")::bigint; "
     acc += "$$ LANGUAGE SQL;"
     
     acc
@@ -369,7 +369,7 @@ class DeepDiveLogPartitioner( program : DeepDiveLog.Program, config : DeepDiveLo
       }
       case PartitionClassWorker(c, ts) => {
         acc += s"UPDATE $table_name SET partition_key = '$c' || bigint_to_workerid("
-        acc += ts.map({ t => "hash_to_bigint(" + t + "::text)" }).mkString(" + ")
+        acc += ts.map({ t => "bigint_to_workerid(hash_to_bigint(" + t + "::text))" }).mkString(" + ")
         acc += ");"
       }
     }
