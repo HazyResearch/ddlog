@@ -25,6 +25,8 @@ object DeepDiveLog {
    , skipDesugar: Boolean = false
    , numWorkers: Int = 16
    , costModelPath: String = ""
+   , useUFO: Boolean = false
+   , partitionPlan: String = "A"
   )
   val commandLine = new scopt.OptionParser[Config]("ddlog") {
     val commonProgramOpts = List(
@@ -41,6 +43,10 @@ object DeepDiveLog {
     opt[Unit]("skip-desugar")          optional() action { (_, c) => c.copy(skipDesugar = true)                   } text("Whether to skip desugaring and assume no sugar")
     opt[Int]('w', "workers")           optional() action { (i, c) => c.copy(numWorkers = i)                       } text("Number of workers for semantic partitioning")
     opt[String]('M', "cost-model")     optional() action { (m, c) => c.copy(costModelPath = m)                    } text("Path of cost model file")
+    opt[Unit]('u', "use-ufo")          optional() action { (_, c) => c.copy(useUFO = true)                        } text("Enable unary partial factor optimization for partitioning")
+    opt[Unit]("ppa")                   optional() action { (_, c) => c.copy(partitionPlan = "A")                  } text("Use partition plan A")
+    opt[Unit]("ppb")                   optional() action { (_, c) => c.copy(partitionPlan = "B")                  } text("Use partition plan B")
+    opt[Unit]("ppc")                   optional() action { (_, c) => c.copy(partitionPlan = "C")                  } text("Use partition plan C")
     arg[String]("FILE...") minOccurs(0) unbounded() action { (f, c) => c.copy(inputFiles = c.inputFiles ++ List(f)) } text("Path to DDLog program files")
     checkConfig { c =>
       if (c.handler == null) failure("No command specified")

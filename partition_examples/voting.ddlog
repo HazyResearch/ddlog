@@ -1,0 +1,29 @@
+
+voter_voted_for (
+  voter_id bigint,
+  prop_id bigint
+).
+
+proposition? (
+  prop_id bigint
+).
+
+yay_vote? (
+  voter_id bigint
+).
+
+nay_vote? (
+  voter_id bigint
+).
+
+@weight(p)
+yay_vote(v) => proposition(p) :-
+  voter_voted_for(v, p).
+
+@weight(p)
+nay_vote(v) => !proposition(p) :-
+  voter_voted_for(v, p).
+
+@weight(-2.0)
+yay_vote(v) ^ nay_vote(v) :-
+  TRUE.

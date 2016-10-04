@@ -25,6 +25,41 @@ case class PartitionClassWorker(c: String, by_terms: Set[String]) extends Partit
   }
 }
 
+class PromotionClass {
+  var is_shared: Boolean = false
+  var is_ufo: Boolean = false
+
+  def share: PromotionClass = {
+    is_shared = true
+    this
+  }
+  def ufo: PromotionClass = {
+    is_ufo = true
+    this
+  }
+
+  def promote(p: PartitionClass): PartitionClass = {
+    p match {
+      case PartitionClassMaster("A") => {
+        (is_shared, is_ufo) match {
+          case (false, false) => PartitionClassMaster("A")
+          case (true, false) => PartitionClassMaster("B")
+          case (false, true) => PartitionClassMaster("Au")
+          case (true, true) => PartitionClassMaster("Bu")
+        }
+      }
+      case PartitionClassWorker("C", t) => {
+        (is_shared, is_ufo) match {
+          case (false, false) => PartitionClassWorker("C", t)
+          case (true, false) => PartitionClassWorker("D", t)
+          case (false, true) => PartitionClassWorker("Cu", t)
+          case (true, true) => PartitionClassWorker("Du", t)
+        }
+      }
+      case _ => throw new Exception("Unexpected partition class in promotion: " + p.toString)
+    }
+  }
+}
 
 // Compiler that takes parsed program as input and turns into a partitioning file
 class DeepDiveLogPartitioner( program : DeepDiveLog.Program, config : DeepDiveLog.Config ) {
@@ -32,6 +67,10 @@ class DeepDiveLogPartitioner( program : DeepDiveLog.Program, config : DeepDiveLo
 
   val statements = program
   val numWorkers = config.numWorkers
+  val cfgUseUfo = config.useUFO
+  val cfgPartitionPlan = config.partitionPlan
+
+  //// HEADER OBJECTS COPIED FROM COMPILER CLASS
 
   val attrNameForRelationAndPosition: Map[ Tuple2[String,Int], String ] =
     (statements collect {
@@ -112,6 +151,8 @@ class DeepDiveLogPartitioner( program : DeepDiveLog.Program, config : DeepDiveLo
     }
   }
 
+  // HEADER VALUES FOR THE PARTITIONER
+
   val partitionCost: Map[String,Double] = if (config.costModelPath == "") {
     Map[String,Double]()
   }
@@ -123,21 +164,57 @@ class DeepDiveLogPartitioner( program : DeepDiveLog.Program, config : DeepDiveLo
     }).toSeq:_*)
   }
 
-  // Map(
-  //   "v_B" -> 10.0,
-  //   "v_A" -> 1.0,
-  //   "v_D" -> 3.0,
-  //   "f_F" -> 4.0,
-  //   "e_F_A" -> 1.0,
-  //   "e_F_B" -> 1.0,
-  //   "e_F_C" -> 1.0,
-  //   "e_F_D" -> 1.0,
-  //   "f_H" -> 40.0
-  // )
+  val template_vars = Set((program.flatMap { s =>
+      s match {
+        case SchemaDeclaration(Attribute(n, t, _, _), true, _) => Seq(SimplifiedAtom(n, t));
+        case _ => Seq()
+      }
+    }):_*)
 
-  def typeArity(tp: Int, typeMap: Map[String, Int], v: SimplifiedAtom): Int = {
+  val template_var_map = Map(template_vars.toSeq.map({ v => v.name -> v }):_*)
+
+  val template_var_names = template_vars.map { v => v.name }
+
+  val simplified_irs = program.flatMap { s =>
+    s match {
+      case InferenceRule(h, _, _, _) => {
+        val sname = resolveInferenceBlockName(s.asInstanceOf[InferenceRule])
+        val svars = h.variables.flatMap { v =>
+          if (template_var_names.contains(v.atom.name) && v.atom.terms.forall(t => t.isInstanceOf[VarPattern])) {
+            Seq(SimplifiedAtom(v.atom.name, v.atom.terms.map(t => t.asInstanceOf[VarPattern].name)))
+          }
+          else {
+            Seq()
+          }
+        }
+        Seq(SimplifiedInferenceRule(sname, svars))
+      }
+      case _ => Seq()
+    }
+  }
+
+  val type_map: Map[String, Int] = {
+    val typeUnifier = new TypeUnifier
+
+    for (si <- simplified_irs) {
+      for (v <- si.variables) {
+        for ((t, i) <- v.terms.zipWithIndex) {
+          typeUnifier.unify(
+            "f_" + si.name + "_" + t + "_t",
+            "v_" + v.name + "_arg" + i.toString + "_t"
+          )
+        }
+      }
+    }
+
+    typeUnifier.type_map
+  }
+
+  // PARTITIONING FUNCTIONS
+
+  def typeArity(tp: Int, v: SimplifiedAtom): Int = {
     (0 until v.terms.size).map({ i =>
-      if (typeMap("v_" + v.name + "_arg" + i.toString + "_t") == tp) {
+      if (type_map("v_" + v.name + "_arg" + i.toString + "_t") == tp) {
         1
       }
       else {
@@ -146,9 +223,9 @@ class DeepDiveLogPartitioner( program : DeepDiveLog.Program, config : DeepDiveLo
     }).sum
   }
 
-  def typeArity(tp: Int, typeMap: Map[String, Int], ir: SimplifiedInferenceRule): Int = {
+  def typeArity(tp: Int, ir: SimplifiedInferenceRule): Int = {
     val ir_arity = freeTerms(ir).toSeq.map({ t => 
-      if (typeMap("f_" + ir.name + "_" + t + "_t") == tp) {
+      if (type_map("f_" + ir.name + "_" + t + "_t") == tp) {
         1
       }
       else {
@@ -156,7 +233,7 @@ class DeepDiveLogPartitioner( program : DeepDiveLog.Program, config : DeepDiveLo
       }
     }).sum
 
-    val arities = Set((ir.variables.map { v => typeArity(tp, typeMap, v) }):_*) + ir_arity
+    val arities = Set((ir.variables.map { v => typeArity(tp, v) }):_*) + ir_arity
 
     if (arities.size == 1) {
       arities.head
@@ -172,39 +249,39 @@ class DeepDiveLogPartitioner( program : DeepDiveLog.Program, config : DeepDiveLo
     }):_*)
   }
 
-  def canPartition(tbp: Map[Int, Int], typeMap: Map[String, Int], v: SimplifiedAtom): Boolean = {
+  def canPartition(tbp: Map[Int, Int], v: SimplifiedAtom): Boolean = {
     // validate every tpe in tbp
     (tbp.forall { case (tp, a) =>
       if (a == 0) {
         true
       }
       else {
-        typeArity(tp, typeMap, v) == a
+        typeArity(tp, v) == a
       }
     })&&(
       tbp.exists { case (tp, a) => (a != 0) }
     )
   }
 
-  def canPartition(tbp: Map[Int, Int], typeMap: Map[String, Int], ir: SimplifiedInferenceRule): Boolean = {
+  def canPartition(tbp: Map[Int, Int], ir: SimplifiedInferenceRule): Boolean = {
     // validate every tpe in tbp
     (tbp.forall { case (tp, a) =>
       if (a == 0) {
         true
       }
       else {
-        typeArity(tp, typeMap, ir) == a
+        typeArity(tp, ir) == a
       }
     })&&(
       tbp.exists { case (tp, a) => (a != 0) }
     )
   }
 
-  def candidateTypePartitions(typeMap: Map[String, Int], ir: SimplifiedInferenceRule): Set[Map[Int, Int]] = {
-    val types = Set((typeMap.values.toSeq):_*).toSeq
+  def candidateTypePartitions(ir: SimplifiedInferenceRule): Set[Map[Int, Int]] = {
+    val types = Set((type_map.values.toSeq):_*).toSeq
 
     val typeArityMap = Map((types.flatMap { tp =>
-      val tp_arity = typeArity(tp, typeMap, ir)
+      val tp_arity = typeArity(tp, ir)
       if (tp_arity != 0) {
         Seq((tp -> tp_arity))
       }
@@ -216,16 +293,16 @@ class DeepDiveLogPartitioner( program : DeepDiveLog.Program, config : DeepDiveLo
     submaps(typeArityMap) - (Map())
   }
 
-  def getVariableOwner(tbp: Map[Int, Int], typeMap: Map[String, Int], v: SimplifiedAtom): PartitionClass = {
+  def getVariableOwner(tbp: Map[Int, Int], v: SimplifiedAtom): PartitionClass = {
     if (tbp.size == 0) {
       PartitionClassMaster("A")
     }
     else {
       val terms_by_type = v.terms.zipWithIndex.groupBy { case (t, i) => 
-        typeMap("v_" + v.name + "_arg" + i.toString + "_t")
+        type_map("v_" + v.name + "_arg" + i.toString + "_t")
       }
 
-      if (tbp.keys.forall { tp => tbp(tp) == terms_by_type(tp).size }) {
+      if (tbp.keys.forall { tp => tbp(tp) == terms_by_type.getOrElse(tp, List()).size }) {
         PartitionClassWorker("C", Set(((tbp.keys.flatMap { tp =>
           terms_by_type(tp).map { case (t, i) => t }
         }).toSeq):_*))
@@ -236,9 +313,9 @@ class DeepDiveLogPartitioner( program : DeepDiveLog.Program, config : DeepDiveLo
     }
   }
 
-  def getVariableOwner(tbps: Set[Map[Int, Int]], typeMap: Map[String, Int], v: SimplifiedAtom): PartitionClass = {
+  def getVariableOwner(tbps: Set[Map[Int, Int]], v: SimplifiedAtom): PartitionClass = {
     val possible_owners = tbps.map { tbp =>
-      getVariableOwner(tbp, typeMap, v)
+      getVariableOwner(tbp, v)
     }
 
     if (possible_owners.size == 1) {
@@ -246,31 +323,6 @@ class DeepDiveLogPartitioner( program : DeepDiveLog.Program, config : DeepDiveLo
     }
     else {
       PartitionClassMaster("A")
-    }
-  }
-
-  def getFactorPartition(tbps: Set[Map[Int, Int]], typeMap: Map[String, Int], ir: SimplifiedInferenceRule, shared_vars: scala.collection.mutable.Set[String]): PartitionClass = {
-    val variable_owners = Set((ir.variables.map { v =>
-      getVariableOwner(tbps, typeMap, v)
-    }):_*)
-
-    if (variable_owners.size == 1) {
-      // all the variables have the same local partition, so we can just use it
-      variable_owners.head
-    }
-    else if ((variable_owners - PartitionClassMaster("A")).size == 1) {
-      // the variables are all owned by either master, or a single worker
-      // use partition class F
-      val worker_pc = (variable_owners - PartitionClassMaster("A")).head
-
-      for (v <- ir.variables) {
-        shared_vars += v.name
-      }
-
-      PartitionClassWorker("F", worker_pc.asInstanceOf[PartitionClassWorker].by_terms)
-    }
-    else {
-      PartitionClassMaster("H")
     }
   }
 
@@ -325,7 +377,7 @@ class DeepDiveLogPartitioner( program : DeepDiveLog.Program, config : DeepDiveLo
     acc
   }
 
-  def factorApplySQL(ir: SimplifiedInferenceRule, pc: PartitionClass, vm: Map[String, SimplifiedAtom]) = {
+  def factorApplySQL(ir: SimplifiedInferenceRule, pc: PartitionClass) = {
     val table_name = "dd_factors_" + ir.name
 
     var acc = s"ALTER TABLE $table_name ADD partition_key varchar(16);\n" 
@@ -338,7 +390,7 @@ class DeepDiveLogPartitioner( program : DeepDiveLog.Program, config : DeepDiveLo
 
         val term_map = Map((ts.toSeq.map({ t => 
           t -> ir.variables.zipWithIndex.flatMap({ case (v, i) =>
-            v.terms.zip(vm(v.name).terms).map({ case (t, mt) =>
+            v.terms.zip(template_var_map(v.name).terms).map({ case (t, mt) =>
               "R" + i.toString + "." + mt
             })
           }).head
@@ -351,10 +403,11 @@ class DeepDiveLogPartitioner( program : DeepDiveLog.Program, config : DeepDiveLo
           "dd_variables_" + v.name + " AS R" + i.toString
         }).mkString(", ")
         acc += " WHERE "
-        acc += ir.variables.zipWithIndex.flatMap({ case (v, i) =>
-          v.terms.zip(vm(v.name).terms).map({ case (t, mt) =>
-            "(R" + i.toString + "." + mt + " = " + term_map(t) + ")"
-          }) :+ ("(T.\\\"" + v.name + ".R" + i.toString + ".dd_id\\\" = R" + i.toString + ".dd_id)")
+        acc += ir.variables.zipWithIndex.map({ case (v, i) =>
+          // v.terms.zip(template_var_map(v.name).terms).map({ case (t, mt) =>
+          //   "(R" + i.toString + "." + mt + " = " + term_map(t) + ")"
+          // }) :+ 
+          "(T.\\\"" + v.name + ".R" + i.toString + ".dd_id\\\" = R" + i.toString + ".dd_id)"
         }).mkString(" AND ")
         acc += ";"
       }
@@ -387,127 +440,35 @@ class DeepDiveLogPartitioner( program : DeepDiveLog.Program, config : DeepDiveLo
   }
 
   def partition() = {
-    val template_vars = Set((program.flatMap { s =>
-      s match {
-        case SchemaDeclaration(Attribute(n, t, _, _), true, _) => Seq(SimplifiedAtom(n, t));
-        // case InferenceRule(_, _, _, _) => { println(s); println() }
-        case _ => Seq()
-      }
-    }):_*)
-
-    val template_var_map = Map(template_vars.toSeq.map({ v => v.name -> v }):_*)
-
-    val template_var_names = template_vars.map { v => v.name }
-
-    // println(template_vars)
-    // println(template_var_names)
-
-    val simplified_irs = program.flatMap { s =>
-      s match {
-        case InferenceRule(h, _, _, _) => {
-          val sname = resolveInferenceBlockName(s.asInstanceOf[InferenceRule])
-          val svars = h.variables.flatMap { v =>
-            if (template_var_names.contains(v.atom.name) && v.atom.terms.forall(t => t.isInstanceOf[VarPattern])) {
-              Seq(SimplifiedAtom(v.atom.name, v.atom.terms.map(t => t.asInstanceOf[VarPattern].name)))
-            }
-            else {
-              Seq()
-            }
-          }
-          Seq(SimplifiedInferenceRule(sname, svars))
-        }
-        case _ => Seq()
-      }
-    }
-
-    // for (si <- simplified_irs) {
-    //   println()
-    //   println(si)
-    // }
-
-    val arityMap = Map((template_var_names.toSeq.map { v =>
-      val v_arities = Set((simplified_irs.flatMap { si =>
-        si.variables.flatMap { vv =>
-          if (vv.name == v) {
-            Seq(vv.terms.size)
-          }
-          else {
-            Seq()
-          }
-        }
-      }):_*)
-
-      assert(v_arities.size == 1)
-
-      v -> v_arities.head
-    }):_*)
-
-    // println()
-    // println(arityMap)
-
-    val typeUnifier = new TypeUnifier
-
-    for (si <- simplified_irs) {
-      for (v <- si.variables) {
-        for ((t, i) <- v.terms.zipWithIndex) {
-          typeUnifier.unify(
-            "f_" + si.name + "_" + t + "_t",
-            "v_" + v.name + "_arg" + i.toString + "_t"
-          )
-        }
-      }
-    }
-
-    // println()
-    // println(typeUnifier.typeMap)
-
     val candidate_partitions = Seq((simplified_irs.map({ ir =>
-      candidateTypePartitions(typeUnifier.typeMap, ir)
+      candidateTypePartitions(ir)
     }).reduce(_ union _).subsets.toSeq):_*)
 
-    // println()
-    // println(candidate_partitions)
-
-    // println("foo")
-    // println("bar")
-    // println(candidate_partitions)
+    val partition_plan = cfgPartitionPlan match {
+      case "A" => PartitionPlanA
+      case "B" => PartitionPlanB
+      case _ => throw new Exception("Invalid partition plan \"" + cfgPartitionPlan + "\"") 
+    }
 
     println("[")
 
     println(candidate_partitions.map({ type_partition =>
 
       val variable_owners = Map((template_vars.toSeq.map { v =>
-       v -> getVariableOwner(type_partition, typeUnifier.typeMap, v)
+        v -> getVariableOwner(type_partition, v)
       }):_*)
 
-      // println()
-      // println(type_partition)
-      // println(variable_owners)
-
-      val shared_vars = scala.collection.mutable.Set[String]()
+      val promotions = Map[String, PromotionClass]((template_var_names.toSeq.map { v =>
+        v -> new PromotionClass
+      }):_*)
 
       val factor_partitions = Map((simplified_irs.map { ir =>
-        ir -> getFactorPartition(type_partition, typeUnifier.typeMap, ir, shared_vars)
+        ir -> partition_plan.getFactorPartition(type_partition, ir, promotions)
       }):_*)
 
-      // println(factor_partitions)
-
       val variable_partitions = variable_owners.map {case (v, p) =>
-        v.name -> (
-          if (shared_vars.contains(v.name)) {
-            p match {
-              case PartitionClassMaster("A") => PartitionClassMaster("B")
-              case PartitionClassWorker("C", t) => PartitionClassWorker("D", t)
-              case _ => throw new Exception("Unexpected partition class: " + v.toString)
-            }
-          }
-          else {
-            p
-          }
-        )
+        v.name -> promotions(v.name).promote(p)
       }
-
-      // println(variable_partitions)
 
       var acc = ""
 
@@ -532,7 +493,7 @@ class DeepDiveLogPartitioner( program : DeepDiveLog.Program, config : DeepDiveLo
       variable_partitions.flatMap({ case (v,p) =>
         variableApplySQL(v, p).split("\n")
       }) ++ factor_partitions.flatMap({ case (ir,p) =>
-        factorApplySQL(ir, p, template_var_map).split("\n")
+        factorApplySQL(ir, p).split("\n")
       })).map({ s =>
         "      \"" + s + "\"" 
       }).mkString(",\n")) + "\n"
@@ -555,29 +516,138 @@ class DeepDiveLogPartitioner( program : DeepDiveLog.Program, config : DeepDiveLo
     println("]")
   }
 
+  trait PartitionPlan {
+    def getFactorPartition(tbps: Set[Map[Int, Int]], ir: SimplifiedInferenceRule, promotions: Map[String, PromotionClass]): PartitionClass
+  }
+
+  object PartitionPlanA extends PartitionPlan {
+
+    def getFactorPartition(tbps: Set[Map[Int, Int]], ir: SimplifiedInferenceRule, promotions: Map[String, PromotionClass]): PartitionClass = {
+      val variable_owners = Set((ir.variables.map { v =>
+        getVariableOwner(tbps, v)
+      }):_*)
+
+      if (variable_owners.size == 1) {
+        // all the variables have the same local partition, so we can just use it
+        variable_owners.head
+      }
+      else if ((variable_owners - PartitionClassMaster("A")).size == 1) {
+        // the variables are all owned by either master, or a single worker
+        // use partition class F
+        val worker_pc = (variable_owners - PartitionClassMaster("A")).head
+
+        for (v <- ir.variables) {
+          promotions(v.name).share
+        }
+
+        PartitionClassWorker("F", worker_pc.asInstanceOf[PartitionClassWorker].by_terms)
+      }
+      else {
+        PartitionClassMaster("H")
+      }
+    }
+
+  }
+
+  object PartitionPlanB extends PartitionPlan {
+
+    def getFactorPartition(tbps: Set[Map[Int, Int]], ir: SimplifiedInferenceRule, promotions: Map[String, PromotionClass]): PartitionClass = {
+      val variable_owners = Set((ir.variables.map { v =>
+        getVariableOwner(tbps, v)
+      }):_*)
+
+      if (variable_owners.size == 1) {
+        // all the variables have the same local partition, so we can just use it
+        variable_owners.head
+      }
+      else if ((variable_owners - PartitionClassMaster("A")).size == 1) {
+        // the variables are all owned by either master, or a single worker
+        // use partition class G
+        val worker_pc_terms = (variable_owners - PartitionClassMaster("A")).head.asInstanceOf[PartitionClassWorker].by_terms
+
+        if (cfgUseUfo) {
+
+          val master_vars = (ir.variables.flatMap { v =>
+            if (getVariableOwner(tbps, v) == PartitionClassMaster("A")) {
+              Seq(v)
+            }
+            else {
+              Seq()
+            }
+          })
+
+          val worker_vars = (ir.variables.flatMap { v =>
+            if (getVariableOwner(tbps, v) != PartitionClassMaster("A")) {
+              Seq(v)
+            }
+            else {
+              Seq()
+            }
+          })
+
+          val master_ufo = if (master_vars.size == 1) {
+            promotions(master_vars.head.name).ufo
+            true
+          }
+          else if (master_vars.size > 1) {
+            false
+          }
+          else {
+            throw new Exception("No master vars found in G-class factor.")
+          }
+
+          val worker_ufo = if (worker_vars.size == 1) {
+            promotions(worker_vars.head.name).ufo
+            true
+          }
+          else if (worker_vars.size > 1) {
+            false
+          }
+          else {
+            throw new Exception("No worker vars found in G-class factor.")
+          }
+
+          (master_ufo, worker_ufo) match {
+            case (false, false) => PartitionClassWorker("G", worker_pc_terms)
+            case (true, false) => PartitionClassWorker("Gum", worker_pc_terms)
+            case (false, true) => PartitionClassWorker("Guw", worker_pc_terms)
+            case (true, true) => PartitionClassWorker("Gumw", worker_pc_terms)
+          }
+        }
+        else {
+          PartitionClassWorker("G", worker_pc_terms)
+        }
+      }
+      else {
+        PartitionClassMaster("H")
+      }
+    }
+
+  }
+
 }
 
 class TypeUnifier {
-  var typeMap = Map[String, Int]()
+  var type_map = Map[String, Int]()
   var nextType = 0
 
   def unify(x: String, y: String) {
-    if (!typeMap.contains(x) && !typeMap.contains(y)) {
-      typeMap ++= Seq(x -> nextType, y -> nextType)
+    if (!type_map.contains(x) && !type_map.contains(y)) {
+      type_map ++= Seq(x -> nextType, y -> nextType)
       nextType += 1
     }
-    else if (!typeMap.contains(x) && typeMap.contains(y)) {
-      typeMap += (x -> typeMap(y))
+    else if (!type_map.contains(x) && type_map.contains(y)) {
+      type_map += (x -> type_map(y))
     }
-    else if (typeMap.contains(x) && !typeMap.contains(y)) {
-      typeMap += (y -> typeMap(x))
+    else if (type_map.contains(x) && !type_map.contains(y)) {
+      type_map += (y -> type_map(x))
     }
     else {
-      val tx = typeMap(x)
-      val ty = typeMap(y)
+      val tx = type_map(x)
+      val ty = type_map(y)
       if (tx != ty) {
         val tz = Math.min(tx, ty)
-        typeMap = typeMap.mapValues { v =>
+        type_map = type_map.mapValues { v =>
           if ((v == tx) || (v == ty)) {
             tz
           }
