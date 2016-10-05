@@ -361,7 +361,8 @@ class DeepDiveLogPartitioner( program : DeepDiveLog.Program, config : DeepDiveLo
   def variableApplySQL(v: String, pc: PartitionClass) = {
     val table_name = "dd_variables_" + v
 
-    var acc = s"ALTER TABLE $table_name ADD partition_key varchar(16);\n" 
+    //var acc = s"ALTER TABLE $table_name ADD partition_key varchar(16);\n" 
+    var acc = ""
 
     pc match {
       case PartitionClassMaster(c) => {
@@ -380,7 +381,8 @@ class DeepDiveLogPartitioner( program : DeepDiveLog.Program, config : DeepDiveLo
   def factorApplySQL(ir: SimplifiedInferenceRule, pc: PartitionClass) = {
     val table_name = "dd_factors_" + ir.name
 
-    var acc = s"ALTER TABLE $table_name ADD partition_key varchar(16);\n" 
+    //var acc = s"ALTER TABLE $table_name ADD partition_key varchar(16);\n" 
+    var acc = ""
 
     pc match {
       case PartitionClassMaster(c) => {
