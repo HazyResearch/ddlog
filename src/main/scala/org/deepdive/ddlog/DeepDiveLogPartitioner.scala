@@ -392,14 +392,19 @@ class DeepDiveLogPartitioner( program : DeepDiveLog.Program, config : DeepDiveLo
 
         val term_map = Map((ts.toSeq.map({ t => 
           t -> ir.variables.zipWithIndex.flatMap({ case (v, i) =>
-            v.terms.zip(template_var_map(v.name).terms).map({ case (t, mt) =>
-              "R" + i.toString + "." + mt
+            v.terms.zip(template_var_map(v.name).terms).flatMap({ case (tt, mt) =>
+              if (t == tt) {
+                Seq("R" + i.toString + "." + mt)
+              }
+              else {
+                Seq()
+              }
             })
           }).head
         })):_*)
 
         acc += s"UPDATE $table_name AS T SET partition_key = '$c' || bigint_to_workerid("
-        acc += ts.map({ t => "bigint_to_workerid(hash_to_bigint(" + term_map(t) + "::text))" }).mkString(" + ")
+        acc += ts.toSeq.map({ t => "bigint_to_workerid(hash_to_bigint(" + term_map(t) + "::text))" }).mkString(" + ")
         acc += ") FROM "
         acc += ir.variables.zipWithIndex.map({ case (v, i) =>
           "dd_variables_" + v.name + " AS R" + i.toString
@@ -441,10 +446,31 @@ class DeepDiveLogPartitioner( program : DeepDiveLog.Program, config : DeepDiveLo
     }).sum + partitionCost.getOrElse("f_" + factor_partclass_str, 0.0)
   }
 
+  def nonRedundantPartition(tbps: Set[Map[Int, Int]]): Boolean = {
+    tbps.forall({ p =>
+      tbps.forall({ q =>
+        if (p == q) {
+          true
+        }
+        else {
+          val pset = Set(p.toSeq:_*)
+          val qset = Set(q.toSeq:_*)
+
+          if (pset.subsetOf(qset) || qset.subsetOf(pset)) {
+            false
+          }
+          else {
+            true
+          }
+        }
+      })
+    })
+  }
+
   def partition() = {
     val candidate_partitions = Seq((simplified_irs.map({ ir =>
       candidateTypePartitions(ir)
-    }).reduce(_ union _).subsets.toSeq):_*)
+    }).reduce(_ union _).subsets.toSeq.filter({ p => nonRedundantPartition(p) })):_*)
 
     val partition_plan = cfgPartitionPlan match {
       case "A" => PartitionPlanA
