@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 from __future__ import print_function
 
-vps = [100, 100] # voters per senator
+vps = [10000, 10000] # voters per senator
 
 f = open("input/senator_voted_for.tsv", "w")
 for i in range(len(vps)):
@@ -29,7 +29,7 @@ f = open("input/yay_vote.tsv", "w")
 index = 0
 for i in range(len(vps)):
     for j in range(vps[i]):
-        f.write(str(index) + "\t\\N\n")
+        f.write(str(index) + "\t" + str(i) + "\t\\N\n")
         index += 1
 f.close()
 
@@ -37,6 +37,6 @@ f = open("input/nay_vote.tsv", "w")
 index = 0
 for i in range(len(vps)):
     for j in range(vps[i]):
-        f.write(str(index) + "\t\\N\n")
+        f.write(str(index) + "\t" + str(i) + "\t\\N\n")
         index += 1
 f.close()

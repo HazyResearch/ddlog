@@ -17,19 +17,21 @@ senator? (
 ).
 
 yay_vote? (
-  voter_id bigint
+  voter_id bigint,
+  senator_id bigint
 ).
 
 nay_vote? (
-  voter_id bigint
+  voter_id bigint,
+  senator_id bigint
 ).
 
 @weight(1.0)
-yay_vote(v) => senator(s) :-
+yay_vote(v, s) => senator(s) :-
   voter_voted_for(v, s).
 
 @weight(1.0)
-nay_vote(v) => !senator(s) :-
+nay_vote(v, s) => !senator(s) :-
   voter_voted_for(v, s).
 
 @weight(p)
@@ -37,5 +39,5 @@ senator(s) => proposition(p) :-
   senator_voted_for(s, p).
 
 @weight(-2.0)
-yay_vote(v) ^ nay_vote(v) :-
+yay_vote(v, s) ^ nay_vote(v, s) :-
   TRUE.
