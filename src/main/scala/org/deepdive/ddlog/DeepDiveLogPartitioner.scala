@@ -378,6 +378,23 @@ class DeepDiveLogPartitioner( program : DeepDiveLog.Program, config : DeepDiveLo
     acc
   }
 
+  def variableCountByWorkerSQL(v: String, pc: PartitionClass) = {
+    var acc = ""
+
+    pc match {
+      case PartitionClassMaster(c) => throw new Exception("Unexpected master partition class in variableCountByWorkerSQL")
+      case PartitionClassWorker(c, ts) => {
+        acc += "SELECT bigint_to_workerid("
+        acc += ts.map({ t => "bigint_to_workerid(hash_to_bigint(" + t + "::text))" }).mkString(" + ")
+        acc += ") AS pid, COUNT(*) AS count FROM dd_variables_" + v + " GROUP BY bigint_to_workerid("
+        acc += ts.map({ t => "bigint_to_workerid(hash_to_bigint(" + t + "::text))" }).mkString(" + ")
+        acc += ")"
+      }
+    }
+
+    acc
+  }
+
   def factorApplySQL(ir: SimplifiedInferenceRule, pc: PartitionClass) = {
     val table_name = "dd_factors_" + ir.name
 
@@ -427,6 +444,13 @@ class DeepDiveLogPartitioner( program : DeepDiveLog.Program, config : DeepDiveLo
     pc match {
       case PartitionClassMaster(c) => partitionCost.getOrElse("v_" + c, 0.0)
       case PartitionClassWorker(c, _) => partitionCost.getOrElse("v_" + c, 0.0)
+    }
+  }
+
+  def workerVariableCost(pc: PartitionClass) = {
+    pc match {
+      case PartitionClassMaster(c) => throw new Exception("Expected only worker partition for workerVariableCost.")
+      case PartitionClassWorker(c, _) => partitionCost.getOrElse("w_" + c, 0.0)
     }
   }
 
@@ -534,6 +558,21 @@ class DeepDiveLogPartitioner( program : DeepDiveLog.Program, config : DeepDiveLo
       }) ++ factor_partitions.map({ case (ir,p) =>
         factorPartitionCost(ir, p, variable_partitions).toString + " * (SELECT COUNT(*) FROM dd_factors_" + ir.name + ")"
       })).mkString(" + ")
+
+      if (variable_partitions.exists({ case (v,p) => p.isInstanceOf[PartitionClassWorker] })) {
+        val worker_var_partitions = variable_partitions.filter({ case (v,p) => p.isInstanceOf[PartitionClassWorker] })
+
+        acc += " + (SELECT MAX("
+        acc += worker_var_partitions.map({ case (v,p) => workerVariableCost(p).toString + " * count_variables_" + v + ".count" }).mkString(" + ")
+        acc += ") FROM "
+        acc += worker_var_partitions.map({ case (v, p) => "(" + variableCountByWorkerSQL(v, p) + ") AS " + "count_variables_" + v }).mkString(", ")
+        if (worker_var_partitions.size > 1) {
+          acc += " WHERE "
+          acc += worker_var_partitions.tail.map({ case (v, p) => "count_variables_" + v + ".pid = " + "count_variables_" + worker_var_partitions.head._1 + ".pid"}).mkString(" AND ")
+        }
+        acc += ")"
+      }
+
       acc += ") AS total_cost;\"\n"
 
       acc += "  }"
