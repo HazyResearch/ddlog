@@ -541,9 +541,14 @@ class DeepDiveLogPartitioner( program : DeepDiveLog.Program, config : DeepDiveLo
       }).mkString(",\n")) + "\n"
       acc += "    },\n"
 
+      acc += "    \"sql_prefix\": [\n"
+      acc += (prefixSQL.split("\n").map({ s =>
+        "      \"" + s + "\"" 
+      }).mkString(",\n")) + "\n"
+      acc += "    ],\n"
+
       acc += "    \"sql_to_apply\": [\n"
-      acc += ((prefixSQL.split("\n") ++
-      variable_partitions.flatMap({ case (v,p) =>
+      acc += ((variable_partitions.flatMap({ case (v,p) =>
         variableApplySQL(v, p).split("\n")
       }) ++ factor_partitions.flatMap({ case (ir,p) =>
         factorApplySQL(ir, p).split("\n")
