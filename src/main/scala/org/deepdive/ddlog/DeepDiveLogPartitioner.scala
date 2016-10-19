@@ -446,7 +446,8 @@ class DeepDiveLogPartitioner( program : DeepDiveLog.Program, config : DeepDiveLo
     //var acc = s"ALTER TABLE $table_name ADD partition_key varchar(16);\n" 
     var acc = ""
 
-    acc += s"UPDATE $table_name AS T SET partition_key = 'C' || bigint_to_workerid(C.cc_id) "
+    acc += "UPDATE " + table_name + " AS T SET partition_key = "
+    acc += "CASE WHEN C.cc_id = -1 THEN 'B' ELSE 'C' || bigint_to_workerid(C.cc_id) END "
     acc += "FROM variable_to_cc AS C WHERE T.dd_id = C.dd_id;"
 
     acc
@@ -458,8 +459,37 @@ class DeepDiveLogPartitioner( program : DeepDiveLog.Program, config : DeepDiveLo
     //var acc = s"ALTER TABLE $table_name ADD partition_key varchar(16);\n" 
     var acc = ""
 
-    acc += s"UPDATE $table_name AS T SET partition_key = 'C' || bigint_to_workerid(C.cc_id) "
-    acc += "FROM variable_to_cc AS C WHERE T.\\\"" + ir.variables.head.name + ".R0.dd_id\\\" = C.dd_id;"
+    acc += s"UPDATE $table_name AS T SET partition_key = "
+
+    // if all CC_ID are -1 ==> assign A
+    acc += "CASE WHEN "
+    acc += ir.variables.zipWithIndex.map({ case (v, i) =>
+      "C" + i.toString + ".cc_id = -1"
+    }).mkString(" AND ")
+    acc += " THEN 'A' WHEN "
+
+    // if some, but not all, CC_ID are -1 ==> assign G
+    acc += ir.variables.zipWithIndex.map({ case (v, i) =>
+      "C" + i.toString + ".cc_id = -1"
+    }).mkString(" OR ")
+    acc += " THEN 'G' || bigint_to_workerid(GREATEST("
+    acc += ir.variables.zipWithIndex.map({ case (v, i) =>
+      "C" + i.toString + ".cc_id"
+    }).mkString(", ")
+
+    // if all CC_ID are non-negative ==> assign C
+    acc += ")) ELSE 'C' || bigint_to_workerid(C0.cc_id) END "
+
+    // construct the join
+    acc += "FROM "
+    acc += ir.variables.zipWithIndex.map({ case (v, i) =>
+      "variable_to_cc AS C" + i.toString
+    }).mkString(", ")
+    acc += " WHERE "
+    acc += ir.variables.zipWithIndex.map({ case (v, i) =>
+      "T.\\\"" + v.name + ".R" + i.toString + ".dd_id\\\" = C" + i.toString + ".dd_id"
+    }).mkString(" AND ")
+    acc += ";"
 
     acc
   }
