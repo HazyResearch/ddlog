@@ -440,6 +440,30 @@ class DeepDiveLogPartitioner( program : DeepDiveLog.Program, config : DeepDiveLo
     acc
   }
 
+  def variableApplyCCSQL(v: String) = {
+    val table_name = "dd_variables_" + v
+
+    //var acc = s"ALTER TABLE $table_name ADD partition_key varchar(16);\n" 
+    var acc = ""
+
+    acc += s"UPDATE $table_name AS T SET partition_key = 'C' || bigint_to_workerid(C.cc_id) "
+    acc += "FROM variable_to_cc AS C WHERE T.dd_id = C.dd_id;"
+
+    acc
+  }
+
+  def factorApplyCCSQL(ir: SimplifiedInferenceRule) = {
+    val table_name = "dd_factors_" + ir.name
+
+    //var acc = s"ALTER TABLE $table_name ADD partition_key varchar(16);\n" 
+    var acc = ""
+
+    acc += s"UPDATE $table_name AS T SET partition_key = 'C' || bigint_to_workerid(C.cc_id) "
+    acc += "FROM variable_to_cc AS C WHERE T.\\\"" + ir.variables.head.name + ".R0.dd_id\\\" = C.dd_id;"
+
+    acc
+  }
+
   def variablePartitionCost(pc: PartitionClass) = {
     pc match {
       case PartitionClassMaster(c) => partitionCost.getOrElse("v_" + c, 0.0)
@@ -585,6 +609,42 @@ class DeepDiveLogPartitioner( program : DeepDiveLog.Program, config : DeepDiveLo
       acc
 
     }).mkString(",\n"))
+
+    println("]")
+  }
+
+  // connected components partition
+  def cc_partition() = {
+
+    println("[")
+
+    println("  {")
+
+    println("    \"partition_types\": \"CC\",")
+
+    println("    \"variable_partition_classes\": { },")
+
+    println("    \"factor_partition_classes\": { },")
+
+    println("    \"sql_prefix\": [")
+    println((prefixSQL.split("\n").map({ s =>
+      "      \"" + s + "\"" 
+    }).mkString(",\n")))
+    println("    ],")
+
+    println("    \"sql_to_apply\": [")
+    println(((template_var_names.flatMap({ v =>
+      variableApplyCCSQL(v).split("\n")
+    }) ++ simplified_irs.flatMap({ ir =>
+      factorApplyCCSQL(ir).split("\n")
+    })).map({ s =>
+      "      \"" + s + "\"" 
+    }).mkString(",\n")))
+    println("    ],")
+
+    println("    \"sql_to_cost\": \"SELECT (0.0) AS total_cost;\"")
+
+    println("  }")
 
     println("]")
   }
@@ -810,6 +870,34 @@ object DeepDiveLogPartitioner extends DeepDiveLogHandler {
 
     // compile the program into blocks of deepdive.conf
     val blocks = partitioner.partition()
+  }
+
+}
+
+// connected components partitioner
+object DeepDiveLogCCPartitioner extends DeepDiveLogHandler {
+
+  type CompiledBlocks = List[(String, Any)]  // TODO be more specific
+  case class QuotedString(value: String)
+
+  // some of the reserved names used in compilation
+  val deepdiveViewOrderedColumnPrefix = DeepDiveLogCompiler.deepdiveViewOrderedColumnPrefix
+  val deepdiveWeightColumnPrefix = DeepDiveLogCompiler.deepdiveWeightColumnPrefix
+  val deepdiveVariableIdColumn = DeepDiveLogCompiler.deepdiveVariableIdColumn
+  val deepdiveVariableLabelColumn = DeepDiveLogCompiler.deepdiveVariableLabelColumn
+  val deepdivePrefixForVariablesIdsTable = DeepDiveLogCompiler.deepdivePrefixForVariablesIdsTable
+
+  // entry point for partitioning
+  override def run(parsedProgram: DeepDiveLog.Program, config: DeepDiveLog.Config) = {
+    // don't partition if it doesn't pass all semantic checks
+    DeepDiveLogSemanticChecker.run(parsedProgram, config)
+    val programToPartition = parsedProgram
+
+    // take an initial pass to analyze the parsed program
+    val partitioner = new DeepDiveLogPartitioner( programToPartition, config )
+
+    // compile the program into blocks of deepdive.conf
+    val blocks = partitioner.cc_partition()
   }
 
 }

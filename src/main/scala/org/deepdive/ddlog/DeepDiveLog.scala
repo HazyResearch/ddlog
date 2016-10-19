@@ -40,6 +40,7 @@ object DeepDiveLog {
     cmd("check")                       required() action { (_, c) => c.copy(handler = DeepDiveLogSemanticChecker) } text("Checks if given program is valid")
     cmd("export-schema")               required() action { (_, c) => c.copy(handler = DeepDiveLogSchemaExporter)  } text("Exports given program in JSON")
     cmd("semantic-partition")          required() action { (_, c) => c.copy(handler = DeepDiveLogPartitioner)     } text("Extracts info needed for semantic partitioning")
+    cmd("cc-partition")                required() action { (_, c) => c.copy(handler = DeepDiveLogCCPartitioner)   } text("Extracts info needed for connected components partitioning")
     opt[Unit]("skip-desugar")          optional() action { (_, c) => c.copy(skipDesugar = true)                   } text("Whether to skip desugaring and assume no sugar")
     opt[Int]('w', "workers")           optional() action { (i, c) => c.copy(numWorkers = i)                       } text("Number of workers for semantic partitioning")
     opt[String]('M', "cost-model")     optional() action { (m, c) => c.copy(costModelPath = m)                    } text("Path of cost model file")
