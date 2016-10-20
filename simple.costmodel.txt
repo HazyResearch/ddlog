@@ -21,3 +21,4 @@ f_Eu 0.0
 f_Gum 1.0
 f_Guw 1.0
 f_Gumw 0.0
+f_H 1000.0

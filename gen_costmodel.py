@@ -40,3 +40,6 @@ print("f_Eu", 0.0)
 print("f_Gum", args.comm_mw)
 print("f_Guw", args.comm_wm)
 print("f_Gumw", 0.0)
+
+# some ridiculously large cost for H factors
+print("f_H", 100.0 * (args.compute + args.comm_wm + args.comm_mw + args.broadcast))
