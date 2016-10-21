@@ -472,7 +472,7 @@ class DeepDiveLogPartitioner( program : DeepDiveLog.Program, config : DeepDiveLo
     acc += ir.variables.zipWithIndex.map({ case (v, i) =>
       "C" + i.toString + ".cc_id = -1"
     }).mkString(" OR ")
-    acc += " THEN 'G' || bigint_to_workerid(GREATEST("
+    acc += " THEN 'D' || bigint_to_workerid(GREATEST("
     acc += ir.variables.zipWithIndex.map({ case (v, i) =>
       "C" + i.toString + ".cc_id"
     }).mkString(", ")
