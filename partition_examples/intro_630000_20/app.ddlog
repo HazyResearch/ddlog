@@ -1,0 +1,96 @@
+p? (
+    prop_id bigint
+).
+
+voter_voted_for (
+    voter_id bigint,
+    prop_id bigint
+).
+
+v0? (
+    prop_id bigint
+).
+
+v1? (
+    prop_id bigint
+).
+
+v2? (
+    prop_id bigint
+).
+
+v3? (
+    prop_id bigint
+).
+
+v4? (
+    prop_id bigint
+).
+
+v5? (
+    prop_id bigint
+).
+
+v6? (
+    prop_id bigint
+).
+
+v7? (
+    prop_id bigint
+).
+
+v8? (
+    prop_id bigint
+).
+
+v9? (
+    prop_id bigint
+).
+
+v10? (
+    prop_id bigint
+).
+
+v11? (
+    prop_id bigint
+).
+
+v12? (
+    prop_id bigint
+).
+
+v13? (
+    prop_id bigint
+).
+
+v14? (
+    prop_id bigint
+).
+
+v15? (
+    prop_id bigint
+).
+
+v16? (
+    prop_id bigint
+).
+
+v17? (
+    prop_id bigint
+).
+
+v18? (
+    prop_id bigint
+).
+
+v19? (
+    prop_id bigint
+).
+
+@name("and_factor")
+@weight(1.0)
+p(p) ^ v0(v) ^ v1(v) ^ v2(v) ^ v3(v) ^ v4(v) ^ v5(v) ^ v6(v) ^ v7(v) ^ v8(v) ^ v9(v) ^ v10(v) ^ v11(v) ^ v12(v) ^ v13(v) ^ v14(v) ^ v15(v) ^ v16(v) ^ v17(v) ^ v18(v) ^ v19(v) :-
+  voter_voted_for(v, p).
+
+@weight(0.0)
+v0(v) :- FALSE.

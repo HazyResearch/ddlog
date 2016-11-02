@@ -407,33 +407,49 @@ class DeepDiveLogPartitioner( program : DeepDiveLog.Program, config : DeepDiveLo
       }
       case PartitionClassWorker(c, ts) => {
 
-        val term_map = Map((ts.toSeq.map({ t => 
-          t -> ir.variables.zipWithIndex.flatMap({ case (v, i) =>
-            v.terms.zip(template_var_map(v.name).terms).flatMap({ case (tt, mt) =>
-              if (t == tt) {
-                Seq("R" + i.toString + "." + mt)
-              }
-              else {
-                Seq()
-              }
-            })
-          }).head
-        })):_*)
+        val (kvar, kidx) = ir.variables.zipWithIndex.find({ case (v, i) =>
+          ts.subsetOf(v.terms.toSet)
+        }).get
+
+        val kterm_map = Map(((kvar.terms) zip (template_var_map(kvar.name).terms)).map({ case (x, y) => x -> y }):_*)
+
+        val kterms = ts.toSeq.map({ t => kterm_map(t) })
 
         acc += s"UPDATE $table_name AS T SET partition_key = '$c' || bigint_to_workerid("
-        acc += ts.toSeq.map({ t => "bigint_to_workerid(hash_to_bigint(" + term_map(t) + "::text))" }).mkString(" + ")
-        acc += ") FROM "
-        acc += ir.variables.zipWithIndex.map({ case (v, i) =>
-          "dd_variables_" + v.name + " AS R" + i.toString
-        }).mkString(", ")
-        acc += " WHERE "
-        acc += ir.variables.zipWithIndex.map({ case (v, i) =>
-          // v.terms.zip(template_var_map(v.name).terms).map({ case (t, mt) =>
-          //   "(R" + i.toString + "." + mt + " = " + term_map(t) + ")"
-          // }) :+ 
-          "(T.\\\"" + v.name + ".R" + i.toString + ".dd_id\\\" = R" + i.toString + ".dd_id)"
-        }).mkString(" AND ")
-        acc += ";"
+        acc += kterms.map({ t => "bigint_to_workerid(hash_to_bigint(R." + t + "::text))" }).mkString(" + ")
+        acc += ") FROM dd_variables_" + kvar.name + " AS R "
+        acc += "WHERE (T.\\\"" + kvar.name + ".R" + kidx.toString + ".dd_id\\\" = R.dd_id);"
+
+
+        // // OLD VERSION
+        //
+        // val term_map = Map((ts.toSeq.map({ t => 
+        //   t -> ir.variables.zipWithIndex.flatMap({ case (v, i) =>
+        //     v.terms.zip(template_var_map(v.name).terms).flatMap({ case (tt, mt) =>
+        //       if (t == tt) {
+        //         Seq("R" + i.toString + "." + mt)
+        //       }
+        //       else {
+        //         Seq()
+        //       }
+        //     })
+        //   }).head
+        // })):_*)
+
+        // acc += s"UPDATE $table_name AS T SET partition_key = '$c' || bigint_to_workerid("
+        // acc += ts.toSeq.map({ t => "bigint_to_workerid(hash_to_bigint(" + term_map(t) + "::text))" }).mkString(" + ")
+        // acc += ") FROM "
+        // acc += ir.variables.zipWithIndex.map({ case (v, i) =>
+        //   "dd_variables_" + v.name + " AS R" + i.toString
+        // }).mkString(", ")
+        // acc += " WHERE "
+        // acc += ir.variables.zipWithIndex.map({ case (v, i) =>
+        //   // v.terms.zip(template_var_map(v.name).terms).map({ case (t, mt) =>
+        //   //   "(R" + i.toString + "." + mt + " = " + term_map(t) + ")"
+        //   // }) :+ 
+        //   "(T.\\\"" + v.name + ".R" + i.toString + ".dd_id\\\" = R" + i.toString + ".dd_id)"
+        // }).mkString(" AND ")
+        // acc += ";"
       }
     }
 

@@ -4,7 +4,7 @@ voter_voted_for (
   prop_id bigint
 ).
 
-proposition? (
+proposition? `(
   prop_id bigint
 ).
 
